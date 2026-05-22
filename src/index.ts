@@ -115,7 +115,8 @@ async function fetchDocFiles(
   globs: string[]
 ): Promise<Array<{ filePath: string; content: string }>> {
   // First, get the full file tree at the base ref
-  const { data: treeData } = await withRetry(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: treeData } = await withRetry<any>(
     () =>
       octokit.rest.git.getTree({
         owner,
@@ -139,7 +140,8 @@ async function fetchDocFiles(
     if (!matchesGlob) continue;
 
     try {
-      const { data: fileData } = await withRetry(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: fileData } = await withRetry<any>(
         () =>
           octokit.rest.repos.getContent({
             owner,

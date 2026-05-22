@@ -2,6 +2,29 @@ exports.id = 690;
 exports.ids = [690];
 exports.modules = {
 
+/***/ 7666:
+/***/ ((module, __unused_webpack_exports, __webpack_require__) => {
+
+/*! node-domexception. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
+
+if (!globalThis.DOMException) {
+  try {
+    const { MessageChannel } = __webpack_require__(8167),
+    port = new MessageChannel().port1,
+    ab = new ArrayBuffer()
+    port.postMessage(ab, [ab, ab])
+  } catch (err) {
+    err.constructor.name === 'DOMException' && (
+      globalThis.DOMException = err.constructor
+    )
+  }
+}
+
+module.exports = globalThis.DOMException
+
+
+/***/ }),
+
 /***/ 1204:
 /***/ ((__unused_webpack_module, __unused_webpack_exports, __webpack_require__) => {
 

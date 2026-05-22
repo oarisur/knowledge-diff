@@ -91,8 +91,6 @@ function estimateTokens(text: string): number {
  * The `files` parameter should come from `octokit.pulls.listFiles()`.
  */
 export function parsePRFiles(
-  // Using `any` here because the Octokit response type is deeply nested
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   files: Array<{ filename: string; patch?: string; status: string }>,
   allowedExtensions: string[],
   maxFiles: number
