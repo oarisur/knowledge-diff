@@ -111842,9 +111842,9 @@ async function withRetry(fn, label) {
 }
 // ─── Default Models ───────────────────────────────────────────────────────────
 const DEFAULT_MODELS = {
-    openai: "gpt-3.5-turbo",
-    anthropic: "claude-2",
-    gemini: "gemini-1.0-pro",
+    openai: "gpt-4o",
+    anthropic: "claude-3-5-sonnet-20241022",
+    gemini: "gemini-1.5-pro",
 };
 // ─── System Prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a precise documentation auditor embedded in a CI pipeline.
