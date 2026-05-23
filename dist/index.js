@@ -112234,7 +112234,7 @@ class DriftDetector {
         let totalCandidates = 0;
         for (const changedFile of changedFiles) {
             info(`Analysing: ${changedFile.filePath}`);
-            const candidates = findCandidateSections(changedFile, docIndex, 5);
+            const candidates = findCandidateSections(changedFile, docIndex, 3);
             totalCandidates += candidates.length;
             if (candidates.length === 0) {
                 core_debug(`  No candidate doc sections found for ${changedFile.filePath}`);
