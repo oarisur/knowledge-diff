@@ -55,9 +55,9 @@ export async function withRetry<T>(
 // ─── Default Models ───────────────────────────────────────────────────────────
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  openai: "gpt-4o",
-  anthropic: "claude-3-5-sonnet-20241022",
-  gemini: "gemini-2.5-flash",
+  openai: "gpt-3.5-turbo",
+  anthropic: "claude-2",
+  gemini: "gemini-1.0-pro",
 };
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
@@ -248,11 +248,12 @@ export class LLMClient {
 
   private parseResponse(raw: string): LLMDriftResponse {
     try {
-      // Strip any accidental markdown code fences
-      const cleaned = raw
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/, "")
-        .trim();
+      let cleaned = raw;
+      const jsonStart = cleaned.indexOf('{');
+      const jsonEnd = cleaned.lastIndexOf('}');
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd >= jsonStart) {
+        cleaned = cleaned.substring(jsonStart, jsonEnd + 1);
+      }
       const parsed = JSON.parse(cleaned) as Partial<LLMDriftResponse>;
 
       // Validate confidence against known enum values to prevent
