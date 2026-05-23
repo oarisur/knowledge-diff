@@ -14,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Run Knowledge Diff
         uses: ./   # dogfood: run the action from this repo itself
         with:
