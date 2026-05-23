@@ -20,7 +20,7 @@ jobs:
       - name: Run Knowledge Diff
         uses: ./   # dogfood: run the action from this repo itself
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           llm-provider: gemini
           doc-files: "README.md,ARCHITECTURE.md,CLAUDE.md,docs/**/*.md"
