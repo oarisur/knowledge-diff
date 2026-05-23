@@ -77,7 +77,7 @@ export class DriftDetector {
     for (const changedFile of changedFiles) {
       core.info(`Analysing: ${changedFile.filePath}`);
 
-      const candidates = findCandidateSections(changedFile, docIndex, 3);
+      const candidates = findCandidateSections(changedFile, docIndex, 5);
       totalCandidates += candidates.length;
 
       if (candidates.length === 0) {
