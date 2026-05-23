@@ -57,7 +57,7 @@ export async function withRetry<T>(
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
   openai: "gpt-4o",
   anthropic: "claude-3-5-sonnet-20241022",
-  gemini: "gemini-1.5-pro",
+  gemini: "gemini-2.5-flash",
 };
 
 // ─── System Prompt ────────────────────────────────────────────────────────────

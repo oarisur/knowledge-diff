@@ -111844,7 +111844,7 @@ async function withRetry(fn, label) {
 const DEFAULT_MODELS = {
     openai: "gpt-4o",
     anthropic: "claude-3-5-sonnet-20241022",
-    gemini: "gemini-1.5-pro",
+    gemini: "gemini-2.5-flash",
 };
 // ─── System Prompt ────────────────────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are a precise documentation auditor embedded in a CI pipeline.
