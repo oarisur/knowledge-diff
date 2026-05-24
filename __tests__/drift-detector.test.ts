@@ -181,4 +181,40 @@ describe("DriftDetector", () => {
       result.totalCandidates
     );
   });
+
+  it("continues analysis when LLM throws for a candidate", async () => {
+    const llm = new LLMClient("openai", "test-key");
+    // First call throws, second call succeeds
+    (llm.detectDrift as jest.Mock) = jest.fn()
+      .mockRejectedValueOnce(new Error("API timeout"))
+      .mockResolvedValue({
+        isDrift: false,
+        confidence: "possible",
+        explanation: "No drift.",
+      });
+
+    const detector = new DriftDetector(llm, "medium");
+    const result = await detector.analyse(makeCodeFiles(), makeDocFiles(), []);
+
+    // Should not throw — the failed candidate is skipped
+    expect(result.checkedFiles).toBe(1);
+    // The total candidates were still counted even though one threw
+    expect(result.totalCandidates).toBeGreaterThanOrEqual(1);
+  });
+
+  it("returns empty results when no code files are provided", async () => {
+    const llm = createMockLLM({
+      isDrift: true,
+      confidence: "definite",
+      explanation: "Should never be called.",
+    });
+
+    const detector = new DriftDetector(llm, "medium");
+    const result = await detector.analyse([], makeDocFiles(), []);
+
+    expect(result.checkedFiles).toBe(0);
+    expect(result.driftResults).toHaveLength(0);
+    expect((llm.detectDrift as jest.Mock)).not.toHaveBeenCalled();
+  });
 });
+

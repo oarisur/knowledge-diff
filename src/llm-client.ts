@@ -76,6 +76,13 @@ Rules:
 
 // ─── Prompt Builder ───────────────────────────────────────────────────────────
 
+/** Truncate text to maxLen chars, cutting at the last newline before the limit. */
+function truncateAtNewline(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const cut = text.lastIndexOf('\n', maxLen);
+  return cut > 0 ? text.slice(0, cut) : text.slice(0, maxLen);
+}
+
 export function buildDriftPrompt(
   codeFilePath: string,
   patch: string,
@@ -97,14 +104,14 @@ export function buildDriftPrompt(
 
 CODE CHANGE in \`${codeFilePath}\`:
 \`\`\`diff
-${patch.slice(0, 4000)}
+${truncateAtNewline(patch, 4000)}
 \`\`\`
 
 ---
 
 DOCUMENTATION in \`${docFilePath}\` — Section: "${docHeading}":
 \`\`\`markdown
-${docContent.slice(0, 3000)}
+${truncateAtNewline(docContent, 3000)}
 \`\`\`
 
 ---
@@ -164,6 +171,7 @@ export class LLMClient {
 
     let rawResponse: string;
 
+    const startTime = Date.now();
     try {
       if (this.provider === "openai") {
         rawResponse = await withRetry(
@@ -182,6 +190,8 @@ export class LLMClient {
         );
       }
     } catch (err) {
+      core.debug(`LLM call for ${codeFilePath} took ${Date.now() - startTime}ms`);
+
       core.warning(
         `LLM call failed for ${codeFilePath} ↔ ${docFilePath}#${docHeading}: ${err}`
       );
@@ -192,6 +202,7 @@ export class LLMClient {
       };
     }
 
+    core.debug(`LLM call for ${codeFilePath} took ${Date.now() - startTime}ms`);
     return this.parseResponse(rawResponse);
   }
 
@@ -203,9 +214,9 @@ export class LLMClient {
         { role: "user", content: userPrompt },
       ],
       temperature: 0.1,
-      max_tokens: 512,
+      max_tokens: 1024,
       response_format: { type: "json_object" },
-    });
+    }, { timeout: 60_000 });
 
     return response.choices[0]?.message?.content ?? "{}";
   }
@@ -213,14 +224,14 @@ export class LLMClient {
   private async callAnthropic(userPrompt: string): Promise<string> {
     const response = await this.anthropicClient!.messages.create({
       model: this.model,
-      max_tokens: 512,
+      max_tokens: 1024,
       temperature: 0.1,
       system: SYSTEM_PROMPT,
       messages: [
         { role: "user", content: userPrompt },
         { role: "assistant", content: "{" },  // Prefill to enforce JSON output
       ],
-    });
+    }, { timeout: 60_000 });
 
     const block = response.content[0];
     if (block.type !== "text") return "{}";
@@ -232,18 +243,24 @@ export class LLMClient {
   }
 
   private async callGemini(userPrompt: string): Promise<string> {
-    const response = await this.geminiClient!.models.generateContent({
-      model: this.model,
-      contents: userPrompt,
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        temperature: 0.1,
-        maxOutputTokens: 512,
-        responseMimeType: "application/json",
-      },
-    });
-
-    return response.text ?? "{}";
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60_000);
+    try {
+      const response = await this.geminiClient!.models.generateContent({
+        model: this.model,
+        contents: userPrompt,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          temperature: 0.1,
+          maxOutputTokens: 1024,
+          responseMimeType: "application/json",
+          abortSignal: controller.signal,
+        },
+      });
+      return response.text ?? "{}";
+    } finally {
+      clearTimeout(timeoutId);
+    }
   }
 
   private parseResponse(raw: string): LLMDriftResponse {

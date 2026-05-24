@@ -68,12 +68,24 @@ function splitIntoSections(
  *  - Code block filenames: ```typescript → "typescript"
  *  - Explicit file paths mentioned
  */
+/** Common English words that appear in headings/content but carry no architectural signal. */
+const STOPWORDS = new Set([
+  "the", "and", "for", "are", "but", "not", "you", "all", "can", "had",
+  "her", "was", "one", "our", "out", "has", "have", "been", "some", "them",
+  "than", "its", "over", "into", "just", "about", "could", "would", "make",
+  "like", "back", "only", "come", "made", "after", "being", "also", "from",
+  "using", "used", "with", "this", "that", "will", "each", "which", "their",
+  "what", "when", "how", "who", "does", "then", "here", "they", "more",
+  "see", "may", "very", "most", "other", "should", "above", "below",
+]);
+
 function extractKeywords(heading: string, content: string): string[] {
   const kw = new Set<string>();
 
-  // Words from heading
+  // Words from heading (with stopword filtering)
   for (const word of heading.split(/\W+/)) {
-    if (word.length > 2) kw.add(word.toLowerCase());
+    const lower = word.toLowerCase();
+    if (word.length > 2 && !STOPWORDS.has(lower)) kw.add(lower);
   }
 
   // Inline code spans

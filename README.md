@@ -203,7 +203,7 @@ PR opened / push to PR
 Rather than sending entire files to the LLM (expensive, slow), Knowledge Diff:
 1. Splits each doc into sections by heading
 2. Builds a keyword index over all sections
-3. For each changed code file, looks up the **top 6 most relevant sections** by keyword overlap with the changed file path and symbol names
+3. For each changed code file, looks up the **top 3 most relevant sections** by keyword overlap with the changed file path and symbol names
 4. Sends only those sections to the LLM
 
 This keeps costs low and avoids irrelevant context diluting the analysis.
@@ -226,11 +226,11 @@ If `auto-patch` is `false`, you only need `pull-requests: write`.
 
 ## Cost Estimate
 
-Each PR run makes approximately **N × 3** LLM calls, where N is the number of changed code files (up to `max-files-per-run`). Each call is a short prompt (~1,500 tokens) + a short completion (~200 tokens).
+Each PR run makes approximately **N × 3** LLM calls, where N is the number of changed code files (up to `max-files-per-run`). Each call is a short prompt (~1,500 tokens) + a short completion (~400 tokens).
 
 For a typical PR changing 5 files:
-- ~15 calls × ~1,700 tokens = ~25,500 tokens
-- **Cost at gpt-4o pricing: ~$0.08 per PR run**
+- ~15 calls × ~1,900 tokens ≈ ~28,500 tokens
+- **Cost at gpt-4o pricing: ~$0.10 per PR run**
 
 Set `max-files-per-run: 10` and `sensitivity: low` to minimise cost on large PRs.
 
@@ -245,6 +245,7 @@ npm install
 npm run build       # bundles to dist/index.js via ncc
 npm test            # run unit tests
 npm run typecheck   # verify TypeScript
+npm run lint        # ESLint checks
 ```
 
 ---

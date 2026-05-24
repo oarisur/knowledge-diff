@@ -8,7 +8,7 @@
     "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "build:watch": "tsc --watch",
     "test": "jest --coverage",
-    "lint": "eslint \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"__tests__/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "prepare": "npm run build"
   },
@@ -57,7 +57,15 @@
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/index.ts"
-    ]
+    ],
+    "coverageThreshold": {
+      "global": {
+        "statements": 90,
+        "branches": 75,
+        "functions": 90,
+        "lines": 90
+      }
+    }
   },
   "overrides": {
     "undici": "^7.0.0"

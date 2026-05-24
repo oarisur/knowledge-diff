@@ -1,4 +1,5 @@
 import * as core from "@actions/core";
+import { withRetry } from "./llm-client";
 import type { GitHub } from "@actions/github/lib/utils";
 import type { AnalysisResult, DriftResult, PRContext, PatchPRResult } from "./types";
 
@@ -6,6 +7,8 @@ import type { AnalysisResult, DriftResult, PRContext, PatchPRResult } from "./ty
 
 const COMMENT_MARKER =
   "<!-- knowledge-diff:v1 -->";
+
+const MAX_COMMENT_LENGTH = 65_000; // GitHub max is 65,536; leave margin
 
 // ─── Confidence Badge ─────────────────────────────────────────────────────────
 
@@ -104,6 +107,11 @@ I found **${actionable.length}** documentation drift issue(s) in this PR. The co
 
   body += `\n<sub>🧠 [knowledge-diff](${repoUrl}) • ${result.totalCandidates} candidate pair(s) checked</sub>`;
 
+  if (body.length > MAX_COMMENT_LENGTH) {
+    const truncationNotice = `\n\n---\n\n> ⚠️ **Comment truncated** — ${actionable.length} drift issue(s) found but the full report exceeded GitHub's comment size limit. Review the action logs for complete details.\n\n${COMMENT_MARKER.replace('v1', 'truncated')}`;
+    body = body.slice(0, MAX_COMMENT_LENGTH - truncationNotice.length) + truncationNotice;
+  }
+
   return body;
 }
 
@@ -133,34 +141,38 @@ export class PRCommenter {
       const existingId = await this.findExistingComment();
       if (existingId) {
         core.info(`Updating existing comment #${existingId}`);
-        await this.octokit.rest.issues.updateComment({
+        await withRetry(() => this.octokit.rest.issues.updateComment({
           owner: this.ctx.owner,
           repo: this.ctx.repo,
           comment_id: existingId,
           body,
-        });
+        }), 'updateComment');
         return;
       }
     }
 
     core.info("Posting new PR comment.");
-    await this.octokit.rest.issues.createComment({
+    await withRetry(() => this.octokit.rest.issues.createComment({
       owner: this.ctx.owner,
       repo: this.ctx.repo,
       issue_number: this.ctx.prNumber,
       body,
-    });
+    }), 'createComment');
   }
 
   private async findExistingComment(): Promise<number | null> {
-    const comments = await this.octokit.paginate(
-      this.octokit.rest.issues.listComments,
-      {
-        owner: this.ctx.owner,
-        repo: this.ctx.repo,
-        issue_number: this.ctx.prNumber,
-        per_page: 100,
-      }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const comments = await withRetry<any[]>(
+      () => this.octokit.paginate(
+        this.octokit.rest.issues.listComments,
+        {
+          owner: this.ctx.owner,
+          repo: this.ctx.repo,
+          issue_number: this.ctx.prNumber,
+          per_page: 100,
+        }
+      ),
+      'listComments'
     );
 
     for (const comment of comments) {

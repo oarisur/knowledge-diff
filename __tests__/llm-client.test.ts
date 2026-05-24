@@ -384,5 +384,116 @@ describe("LLMClient", () => {
       expect(result.isDrift).toBe(false);
       expect(result.explanation).toContain("LLM call failed");
     });
+
+    it("handles valid JSON drift response from Anthropic", async () => {
+      const Anthropic = require("@anthropic-ai/sdk");
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: '"isDrift": true, "confidence": "definite", "explanation": "Anthropic detected drift", "staleText": "old text", "suggestedText": "new text"}',
+          },
+        ],
+      });
+
+      Anthropic.mockImplementation(() => ({
+        messages: { create: mockCreate },
+      }));
+
+      const client = new LLMClient("anthropic", "test-key");
+      const result = await client.detectDrift(
+        "file.ts",
+        "patch",
+        "doc.md",
+        "Section",
+        "content",
+        "medium"
+      );
+
+      expect(result.isDrift).toBe(true);
+      expect(result.confidence).toBe("definite");
+      expect(result.explanation).toContain("Anthropic detected drift");
+      expect(result.staleText).toBe("old text");
+      expect(result.suggestedText).toBe("new text");
+    });
+
+    it("handles Anthropic response where model includes opening brace", async () => {
+      const Anthropic = require("@anthropic-ai/sdk");
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [
+          {
+            type: "text",
+            text: '{"isDrift": false, "confidence": "possible", "explanation": "No drift found."}',
+          },
+        ],
+      });
+
+      Anthropic.mockImplementation(() => ({
+        messages: { create: mockCreate },
+      }));
+
+      const client = new LLMClient("anthropic", "test-key");
+      const result = await client.detectDrift(
+        "file.ts",
+        "patch",
+        "doc.md",
+        "Section",
+        "content",
+        "medium"
+      );
+
+      expect(result.isDrift).toBe(false);
+      expect(result.confidence).toBe("possible");
+    });
+
+    it("handles Anthropic non-text content block", async () => {
+      const Anthropic = require("@anthropic-ai/sdk");
+      const mockCreate = jest.fn().mockResolvedValue({
+        content: [{ type: "tool_use", id: "123", name: "test", input: {} }],
+      });
+
+      Anthropic.mockImplementation(() => ({
+        messages: { create: mockCreate },
+      }));
+
+      const client = new LLMClient("anthropic", "test-key");
+      const result = await client.detectDrift(
+        "file.ts",
+        "patch",
+        "doc.md",
+        "Section",
+        "content",
+        "medium"
+      );
+
+      // Returns empty JSON defaults
+      expect(result.isDrift).toBe(false);
+    });
   });
 });
+
+// ─── withRetry exhaustion ─────────────────────────────────────────────────────
+
+describe("withRetry — exhaustion", () => {
+  it("throws after exhausting all retries on retryable error", async () => {
+    const retryableErr = new Error("fetch failed");
+    const fn = jest.fn().mockRejectedValue(retryableErr);
+
+    await expect(withRetry(fn, "test")).rejects.toThrow("fetch failed");
+    // MAX_RETRIES is 4, so 5 total attempts (0..4)
+    expect(fn).toHaveBeenCalledTimes(5);
+  }, 30000);
+
+  it("retries on HTTP 429 status errors", async () => {
+    const rateLimitErr = Object.assign(new Error("Rate limited"), { status: 429 });
+    const fn = jest
+      .fn()
+      .mockRejectedValueOnce(rateLimitErr)
+      .mockResolvedValue("ok");
+
+    const result = await withRetry(fn, "test");
+    expect(result).toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  }, 15000);
+});
+

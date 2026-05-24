@@ -98,7 +98,6 @@ function createMockOctokit() {
 }
 
 // We need to dynamically import PRCommenter to avoid circular mock issues
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { PRCommenter } = require("../src/pr-commenter");
 
 const CTX = {

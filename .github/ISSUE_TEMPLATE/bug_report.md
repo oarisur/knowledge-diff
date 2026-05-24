@@ -1,8 +1,8 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Report a problem with the Knowledge Diff action
 title: ''
-labels: ''
+labels: 'bug'
 assignees: ''
 
 ---
@@ -10,29 +10,28 @@ assignees: ''
 **Describe the bug**
 A clear and concise description of what the bug is.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**Workflow YAML**
+Paste the relevant section of your workflow file:
+```yaml
+# your workflow config here
+```
+
+**Action version**
+Which version/ref are you using? (e.g. `@v1`, `@main`, specific commit SHA)
+
+**Action logs**
+Paste the relevant output from the GitHub Actions run log:
+```
+# paste logs here
+```
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
-
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
-
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**Environment**
+ - Runner OS: [e.g. ubuntu-latest]
+ - Node version: [e.g. 20]
+ - LLM Provider: [e.g. openai, anthropic, gemini]
 
 **Additional context**
-Add any other context about the problem here.
+Add any other context about the problem here. If the PR is public, please link it.

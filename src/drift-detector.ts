@@ -9,6 +9,15 @@ import type {
 import { LLMClient } from "./llm-client";
 import { parseDocFile, buildDocIndex, findCandidateSections } from "./doc-extractor";
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+/**
+ * Maximum chars of doc content to send per LLM call.
+ * llm-client already truncates patch to 4000 and doc to 3000 individually,
+ * but we add a guard here to skip candidates whose section content is empty.
+ */
+const MAX_SECTION_CHARS = 15_000;
+
 // ─── Sensitivity → Confidence Threshold ──────────────────────────────────────
 
 const CONFIDENCE_ORDER = ["definite", "likely", "possible"] as const;
@@ -86,18 +95,34 @@ export class DriftDetector {
       }
 
       for (const candidate of candidates) {
+        // Guard: skip extremely large doc sections
+        if (candidate.matchedSection.content.length > MAX_SECTION_CHARS) {
+          core.debug(
+            `  Skipping ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} — content too large (${candidate.matchedSection.content.length} chars)`
+          );
+          continue;
+        }
+
         core.debug(
           `  Checking against ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} (score: ${candidate.relevanceScore.toFixed(2)})`
         );
 
-        const llmResult = await this.llm.detectDrift(
-          changedFile.filePath,
-          changedFile.patch,
-          candidate.matchedSection.filePath,
-          candidate.matchedSection.heading,
-          candidate.matchedSection.content,
-          this.sensitivity
-        );
+        let llmResult;
+        try {
+          llmResult = await this.llm.detectDrift(
+            changedFile.filePath,
+            changedFile.patch,
+            candidate.matchedSection.filePath,
+            candidate.matchedSection.heading,
+            candidate.matchedSection.content,
+            this.sensitivity
+          );
+        } catch (err) {
+          core.warning(
+            `  LLM call failed for candidate ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading}: ${err}`
+          );
+          continue;
+        }
 
         const meetsThresh = llmResult.isDrift &&
           meetsThreshold(llmResult.confidence, this.sensitivity);

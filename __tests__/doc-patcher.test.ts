@@ -114,7 +114,6 @@ const CTX: PRContext = {
   headOwner: "test-owner",
 };
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { DocPatcher } = require("../src/doc-patcher");
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -213,7 +212,9 @@ describe("DocPatcher", () => {
 
     it("uses updateRef when createRef fails (branch already exists)", async () => {
       const octokit = createMockOctokit();
-      octokit.rest.git.createRef.mockRejectedValue(new Error("Reference already exists"));
+      octokit.rest.git.createRef.mockRejectedValue(
+        Object.assign(new Error("Reference already exists"), { status: 422 })
+      );
       const patcher = new DocPatcher(octokit, CTX);
 
       const docContent = "We use Redux Toolkit for all global state.";

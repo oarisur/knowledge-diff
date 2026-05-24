@@ -19,3 +19,9 @@ coverage/
 # Environment
 .env
 .env.local
+
+# Logs
+*.log
+
+# Cache
+.eslintcache
