@@ -203,7 +203,7 @@ PR opened / push to PR
 Rather than sending entire files to the LLM (expensive, slow), Knowledge Diff:
 1. Splits each doc into sections by heading
 2. Builds a keyword index over all sections
-3. For each changed code file, looks up the **top 3 most relevant sections** by keyword overlap with the changed file path and symbol names
+3. For each changed code file, looks up the **top 6 most relevant sections** by keyword overlap with the changed file path and symbol names
 4. Sends only those sections to the LLM
 
 This keeps costs low and avoids irrelevant context diluting the analysis.
