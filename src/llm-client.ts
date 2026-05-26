@@ -55,7 +55,7 @@ export async function withRetry<T>(
 // ─── Default Models ───────────────────────────────────────────────────────────
 
 const DEFAULT_MODELS: Record<LLMProvider, string> = {
-  openai: "gpt-4o",
+  openai: "gpt-4o-mini",
   anthropic: "claude-3-5-sonnet-20241022",
   gemini: "gemini-2.5-flash",
 };
