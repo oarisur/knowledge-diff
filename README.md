@@ -21,7 +21,7 @@ A developer refactors state management from Redux to Zustand. The code ships. Th
 
 On every pull request, Knowledge Diff:
 
-1. **Reads the code diff** — what functions changed, what lines were added/removed
+1. **Reads the code diff** — what functions, string literals, and lines were added/removed
 2. **Finds relevant doc sections** — matches changed files/symbols against your README, ARCHITECTURE.md, CLAUDE.md, and any other docs you configure
 3. **Asks an LLM** — *"Does the code change contradict what the doc says?"*
 4. **Comments on the PR** — with specific, quote-level detail about what drifted
@@ -84,7 +84,7 @@ jobs:
 | `anthropic-api-key` | ✅* | — | Anthropic API key. Required when `llm-provider` is `anthropic`. |
 | `gemini-api-key` | ✅* | — | Google Gemini API key. Required when `llm-provider` is `gemini`. |
 | `llm-provider` | ❌ | `openai` | LLM backend: `openai`, `anthropic`, or `gemini`. |
-| `llm-model` | ❌ | `gpt-4o` / `claude-3-5-sonnet-20241022` / `gemini-2.5-flash` | Override the model. |
+| `llm-model` | ❌ | `gpt-4o-mini` / `claude-3-5-sonnet-20241022` / `gemini-2.5-flash` | Override the model. |
 | `doc-files` | ❌ | `README.md,ARCHITECTURE.md,CLAUDE.md,docs/**/*.md` | Comma-separated globs of docs to check. |
 | `code-extensions` | ❌ | `ts,tsx,js,jsx,py,go,rs,java,cpp,c,rb,php,swift,kt` | File extensions treated as code. |
 | `sensitivity` | ❌ | `medium` | Drift threshold: `low` (definite only) / `medium` / `high` (includes ambiguities). |
