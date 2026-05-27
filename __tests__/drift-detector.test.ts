@@ -36,6 +36,7 @@ function makeCodeFiles() {
         .filter((l) => l.startsWith("-") && !l.startsWith("---"))
         .map((l) => l.slice(1)),
       changedSymbols: ["useCartStore", "cartSlice", "createSlice"],
+      changedLiterals: [],
       tokenEstimate: Math.ceil(REDUX_TO_ZUSTAND_PATCH.length / 4),
     },
   ];

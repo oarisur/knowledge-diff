@@ -1,9 +1,10 @@
-import { parsePRFiles, isCodeFile } from "../src/diff-parser";
+import { parsePRFiles, isCodeFile, extractStringLiterals } from "../src/diff-parser";
 import {
   REDUX_TO_ZUSTAND_PATCH,
   API_ROUTE_PATCH,
   DB_SWITCH_PATCH,
   UNRELATED_CSS_PATCH,
+  MODEL_NAME_CHANGE_PATCH,
   makePRFile,
 } from "./fixtures/diffs";
 
@@ -112,5 +113,63 @@ describe("parsePRFiles", () => {
     expect(changedFiles).toHaveLength(0);
     expect(skippedFiles).toHaveLength(1);
     expect(skippedFiles[0]).toContain("no patch data");
+  });
+
+  it("extracts changedLiterals from a model name change diff", () => {
+    const files = [makePRFile("src/llm-client.ts", MODEL_NAME_CHANGE_PATCH)];
+    const { changedFiles } = parsePRFiles(files, DEFAULT_EXTENSIONS, 20);
+
+    expect(changedFiles).toHaveLength(1);
+    const file = changedFiles[0];
+    // Only +/- lines are parsed — context lines (unchanged) are not included
+    expect(file.changedLiterals).toContain("gpt-4o");
+    expect(file.changedLiterals).toContain("gpt-4o-mini");
+  });
+
+  it("extracts API URL literals from route change diff", () => {
+    const files = [makePRFile("src/routes/users.ts", API_ROUTE_PATCH)];
+    const { changedFiles } = parsePRFiles(files, DEFAULT_EXTENSIONS, 20);
+
+    const file = changedFiles[0];
+    expect(file.changedLiterals).toContain("/api/v2/users");
+    expect(file.changedLiterals).toContain("/api/v1/users");
+  });
+});
+
+describe("extractStringLiterals", () => {
+  it("extracts quoted string values from code lines", () => {
+    const lines = [
+      '  openai: "gpt-4o-mini",',
+      '  anthropic: "claude-3-5-sonnet-20241022",',
+    ];
+    const result = extractStringLiterals(lines);
+    expect(result).toContain("gpt-4o-mini");
+    expect(result).toContain("claude-3-5-sonnet-20241022");
+  });
+
+  it("filters out stopword literals", () => {
+    const lines = [
+      '"use strict";',
+      'const encoding = "utf-8";',
+      'const method = "GET";',
+      'const model = "gpt-4o";',
+    ];
+    const result = extractStringLiterals(lines);
+    expect(result).not.toContain("use strict");
+    expect(result).not.toContain("utf-8");
+    expect(result).not.toContain("GET");
+    expect(result).toContain("gpt-4o");
+  });
+
+  it("handles single-quoted strings", () => {
+    const lines = ["import { create } from 'zustand';"];
+    const result = extractStringLiterals(lines);
+    expect(result).toContain("zustand");
+  });
+
+  it("returns empty array for lines with no literals", () => {
+    const lines = ["const x = 42;", "if (y > 10) {"];
+    const result = extractStringLiterals(lines);
+    expect(result).toHaveLength(0);
   });
 });

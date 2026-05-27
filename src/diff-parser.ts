@@ -68,6 +68,48 @@ const JS_KEYWORDS = new Set([
   "await", "true", "false", "null", "undefined", "this", "super",
 ]);
 
+// ─── String Literal Extraction ────────────────────────────────────────────────
+
+/**
+ * Captures quoted string values from changed lines.
+ * Matches strings like "gpt-4o-mini", 'openai', "/api/v2/users", etc.
+ * Minimum length 3, must start with alphanumeric to filter punctuation-only values.
+ */
+const STRING_LITERAL_RE = /["']([a-zA-Z0-9/][a-zA-Z0-9_./@:-]{2,})["']/g;
+
+/** Common non-architectural strings to ignore during literal extraction. */
+const LITERAL_STOPWORDS = new Set([
+  "use strict", "utf-8", "utf8", "ascii", "base64", "hex",
+  "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+  "get", "post", "put", "delete", "patch", "head", "options",
+  "text/plain", "text/html", "application/json",
+  "Content-Type", "content-type", "Authorization", "authorization",
+  "string", "number", "boolean", "object", "function",
+  "node_modules", "package.json", "tsconfig.json",
+  "click", "submit", "change", "input", "keydown", "keyup",
+  "div", "span", "button", "form", "table",
+]);
+
+/**
+ * Extract meaningful string literal values from changed lines.
+ * These capture configuration values, model names, URLs, library names, etc.
+ */
+export function extractStringLiterals(lines: string[]): string[] {
+  const literals = new Set<string>();
+  const text = lines.join("\n");
+
+  STRING_LITERAL_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = STRING_LITERAL_RE.exec(text)) !== null) {
+    const value = match[1];
+    if (!LITERAL_STOPWORDS.has(value)) {
+      literals.add(value);
+    }
+  }
+
+  return Array.from(literals);
+}
+
 // ─── File Extension Check ─────────────────────────────────────────────────────
 
 export function isCodeFile(
@@ -125,7 +167,9 @@ export function parsePRFiles(
     const { additions, deletions } = parsePatchLines(file.patch);
 
     // Only extract symbols from *changed* lines (not context lines)
-    const changedSymbols = extractSymbols([...additions, ...deletions]);
+    const changedLines = [...additions, ...deletions];
+    const changedSymbols = extractSymbols(changedLines);
+    const changedLiterals = extractStringLiterals(changedLines);
 
     changedFiles.push({
       filePath: file.filename,
@@ -133,6 +177,7 @@ export function parsePRFiles(
       additions,
       deletions,
       changedSymbols,
+      changedLiterals,
       tokenEstimate: estimateTokens(file.patch),
     });
 

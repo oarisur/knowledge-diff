@@ -79409,6 +79409,42 @@ const JS_KEYWORDS = new Set([
     "from", "import", "export", "return", "const", "class", "async",
     "await", "true", "false", "null", "undefined", "this", "super",
 ]);
+// ─── String Literal Extraction ────────────────────────────────────────────────
+/**
+ * Captures quoted string values from changed lines.
+ * Matches strings like "gpt-4o-mini", 'openai', "/api/v2/users", etc.
+ * Minimum length 3, must start with alphanumeric to filter punctuation-only values.
+ */
+const STRING_LITERAL_RE = /["']([a-zA-Z0-9/][a-zA-Z0-9_./@:-]{2,})["']/g;
+/** Common non-architectural strings to ignore during literal extraction. */
+const LITERAL_STOPWORDS = new Set([
+    "use strict", "utf-8", "utf8", "ascii", "base64", "hex",
+    "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS",
+    "get", "post", "put", "delete", "patch", "head", "options",
+    "text/plain", "text/html", "application/json",
+    "Content-Type", "content-type", "Authorization", "authorization",
+    "string", "number", "boolean", "object", "function",
+    "node_modules", "package.json", "tsconfig.json",
+    "click", "submit", "change", "input", "keydown", "keyup",
+    "div", "span", "button", "form", "table",
+]);
+/**
+ * Extract meaningful string literal values from changed lines.
+ * These capture configuration values, model names, URLs, library names, etc.
+ */
+function extractStringLiterals(lines) {
+    const literals = new Set();
+    const text = lines.join("\n");
+    STRING_LITERAL_RE.lastIndex = 0;
+    let match;
+    while ((match = STRING_LITERAL_RE.exec(text)) !== null) {
+        const value = match[1];
+        if (!LITERAL_STOPWORDS.has(value)) {
+            literals.add(value);
+        }
+    }
+    return Array.from(literals);
+}
 // ─── File Extension Check ─────────────────────────────────────────────────────
 function isCodeFile(filePath, allowedExtensions) {
     const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
@@ -79447,13 +79483,16 @@ function parsePRFiles(files, allowedExtensions, maxFiles) {
         }
         const { additions, deletions } = parsePatchLines(file.patch);
         // Only extract symbols from *changed* lines (not context lines)
-        const changedSymbols = extractSymbols([...additions, ...deletions]);
+        const changedLines = [...additions, ...deletions];
+        const changedSymbols = extractSymbols(changedLines);
+        const changedLiterals = extractStringLiterals(changedLines);
         changedFiles.push({
             filePath: file.filename,
             patch: file.patch,
             additions,
             deletions,
             changedSymbols,
+            changedLiterals,
             tokenEstimate: estimateTokens(file.patch),
         });
         processed++;
@@ -112037,6 +112076,8 @@ class LLMClient {
 // ─── Shared Constants ─────────────────────────────────────────────────────────
 /** Technology keywords that signal architecture intent. Shared across keyword extraction and candidate matching. */
 const TECH_KEYWORD_RE = /\b(redux|zustand|mobx|recoil|jotai|react|vue|angular|express|fastapi|django|rails|postgres|mysql|mongodb|graphql|rest|grpc|websocket|kafka|rabbitmq|redis|docker|kubernetes|aws|gcp|azure)\b/gi;
+/** Captures meaningful quoted string values from documentation content (model names, config values, etc.). */
+const DOC_STRING_LITERAL_RE = /["'`]([a-zA-Z0-9][a-zA-Z0-9_./@:-]{2,})["'`]/g;
 // ─── Markdown Section Splitting ───────────────────────────────────────────────
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
 /**
@@ -112135,6 +112176,11 @@ function extractKeywords(heading, content) {
     for (const m of content.matchAll(TECH_KEYWORD_RE)) {
         kw.add(m[1].toLowerCase());
     }
+    // Quoted string values in documentation (model names, config values, URLs, etc.)
+    // These are critical for matching diffs that change string literal values.
+    for (const m of content.matchAll(DOC_STRING_LITERAL_RE)) {
+        kw.add(m[1].toLowerCase());
+    }
     return Array.from(kw);
 }
 function buildIndex(docFiles) {
@@ -112181,6 +112227,12 @@ function findCandidateSections(changedFile, index, topN = 3) {
     ].join(" ");
     for (const m of changeText.matchAll(TECH_KEYWORD_RE)) {
         queryTerms.add(m[1].toLowerCase());
+    }
+    // String literal values from the diff (model names, config values, URLs, etc.)
+    if (changedFile.changedLiterals) {
+        for (const lit of changedFile.changedLiterals) {
+            queryTerms.add(lit.toLowerCase());
+        }
     }
     // Score sections by how many query terms they match
     for (const term of queryTerms) {
@@ -112270,7 +112322,7 @@ class DriftDetector {
         let totalCandidates = 0;
         for (const changedFile of changedFiles) {
             info(`Analysing: ${changedFile.filePath}`);
-            const candidates = findCandidateSections(changedFile, docIndex, 3);
+            const candidates = findCandidateSections(changedFile, docIndex, 6);
             totalCandidates += candidates.length;
             if (candidates.length === 0) {
                 core_debug(`  No candidate doc sections found for ${changedFile.filePath}`);

@@ -7,6 +7,9 @@ import type { DocFile, DocSection, ChangedFile, DriftCandidate } from "./types";
 const TECH_KEYWORD_RE =
   /\b(redux|zustand|mobx|recoil|jotai|react|vue|angular|express|fastapi|django|rails|postgres|mysql|mongodb|graphql|rest|grpc|websocket|kafka|rabbitmq|redis|docker|kubernetes|aws|gcp|azure)\b/gi;
 
+/** Captures meaningful quoted string values from documentation content (model names, config values, etc.). */
+const DOC_STRING_LITERAL_RE = /["'`]([a-zA-Z0-9][a-zA-Z0-9_./@:-]{2,})["'`]/g;
+
 // ─── Markdown Section Splitting ───────────────────────────────────────────────
 
 const HEADING_RE = /^(#{1,6})\s+(.+)$/;
@@ -116,6 +119,12 @@ function extractKeywords(heading: string, content: string): string[] {
     kw.add(m[1].toLowerCase());
   }
 
+  // Quoted string values in documentation (model names, config values, URLs, etc.)
+  // These are critical for matching diffs that change string literal values.
+  for (const m of content.matchAll(DOC_STRING_LITERAL_RE)) {
+    kw.add(m[1].toLowerCase());
+  }
+
   return Array.from(kw);
 }
 
@@ -181,6 +190,13 @@ export function findCandidateSections(
 
   for (const m of changeText.matchAll(TECH_KEYWORD_RE)) {
     queryTerms.add(m[1].toLowerCase());
+  }
+
+  // String literal values from the diff (model names, config values, URLs, etc.)
+  if (changedFile.changedLiterals) {
+    for (const lit of changedFile.changedLiterals) {
+      queryTerms.add(lit.toLowerCase());
+    }
   }
 
   // Score sections by how many query terms they match

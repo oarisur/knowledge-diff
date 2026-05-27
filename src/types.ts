@@ -43,6 +43,8 @@ export interface ChangedFile {
   additions: string[];
   /** Detected function/class/symbol names that appear in the changed lines */
   changedSymbols: string[];
+  /** String literal values found in the changed lines (e.g., model names, URLs, config values) */
+  changedLiterals: string[];
   /** Total tokens estimate (chars / 4) */
   tokenEstimate: number;
 }

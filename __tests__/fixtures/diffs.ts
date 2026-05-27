@@ -71,6 +71,17 @@ export const UNRELATED_CSS_PATCH = `
  }
 `.trim();
 
+// Fixture: diff that changes a default model name (config value change)
+export const MODEL_NAME_CHANGE_PATCH = `
+@@ -55,7 +55,7 @@
+ const DEFAULT_MODELS: Record<LLMProvider, string> = {
+-  openai: "gpt-4o",
++  openai: "gpt-4o-mini",
+   anthropic: "claude-3-5-sonnet-20241022",
+   gemini: "gemini-2.5-flash",
+ };
+`.trim();
+
 // Fixture: GitHub PR file list entries
 export function makePRFile(
   filename: string,

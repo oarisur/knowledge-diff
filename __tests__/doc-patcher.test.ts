@@ -34,6 +34,7 @@ function makeChangedFile(overrides?: Partial<ChangedFile>): ChangedFile {
     additions: ["+import zustand"],
     deletions: ["-import redux"],
     changedSymbols: ["useCartStore"],
+    changedLiterals: [],
     tokenEstimate: 50,
     ...overrides,
   };

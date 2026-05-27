@@ -1,7 +1,7 @@
 import { parseDocFile, buildDocIndex, findCandidateSections } from "../src/doc-extractor";
 import type { ChangedFile } from "../src/types";
-import { README_WITH_REDUX, ARCHITECTURE_WITH_V1_API, UNRELATED_CHANGELOG } from "./fixtures/docs";
-import { REDUX_TO_ZUSTAND_PATCH, API_ROUTE_PATCH, DB_SWITCH_PATCH } from "./fixtures/diffs";
+import { README_WITH_REDUX, ARCHITECTURE_WITH_V1_API, UNRELATED_CHANGELOG, README_WITH_CONFIG_TABLE } from "./fixtures/docs";
+import { REDUX_TO_ZUSTAND_PATCH, API_ROUTE_PATCH, DB_SWITCH_PATCH, MODEL_NAME_CHANGE_PATCH } from "./fixtures/diffs";
 
 // Suppress @actions/core logging during tests
 jest.mock("@actions/core", () => ({
@@ -15,7 +15,8 @@ jest.mock("@actions/core", () => ({
 function makeChangedFile(
   filePath: string,
   patch: string,
-  changedSymbols: string[]
+  changedSymbols: string[],
+  changedLiterals: string[] = []
 ): ChangedFile {
   const additions = patch
     .split("\n")
@@ -32,6 +33,7 @@ function makeChangedFile(
     additions,
     deletions,
     changedSymbols,
+    changedLiterals,
     tokenEstimate: Math.ceil(patch.length / 4),
   };
 }
@@ -177,5 +179,41 @@ describe("findCandidateSections", () => {
 
     const candidates = findCandidateSections(dbChange, index, 1);
     expect(candidates.length).toBeLessThanOrEqual(1);
+  });
+
+  it("matches model name change to Configuration section via string literals", () => {
+    const docs = [
+      parseDocFile("README.md", README_WITH_CONFIG_TABLE),
+    ];
+    const index = buildDocIndex(docs);
+
+    const modelChange = makeChangedFile(
+      "src/llm-client.ts",
+      MODEL_NAME_CHANGE_PATCH,
+      ["DEFAULT_MODELS"],
+      ["gpt-4o", "gpt-4o-mini", "claude-3-5-sonnet-20241022", "gemini-2.5-flash"]
+    );
+
+    const candidates = findCandidateSections(modelChange, index, 5);
+    expect(candidates.length).toBeGreaterThan(0);
+
+    // The Configuration section should be a top candidate because
+    // it contains the string literals "gpt-4o", "claude-3-5-sonnet-20241022", etc.
+    const configCandidate = candidates.find(
+      (c) => c.matchedSection.heading === "Configuration"
+    );
+    expect(configCandidate).toBeDefined();
+    expect(configCandidate!.relevanceScore).toBeGreaterThan(0);
+  });
+
+  it("indexes quoted string values from doc content as keywords", () => {
+    const doc = parseDocFile("README.md", README_WITH_CONFIG_TABLE);
+    const configSection = doc.sections.find((s) => s.heading === "Configuration");
+    expect(configSection).toBeDefined();
+
+    // The config table mentions gpt-4o in backtick-quoted inline code
+    expect(configSection!.keywords).toContain("gpt-4o");
+    expect(configSection!.keywords).toContain("claude-3-5-sonnet-20241022");
+    expect(configSection!.keywords).toContain("gemini-2.5-flash");
   });
 });

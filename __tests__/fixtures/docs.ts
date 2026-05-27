@@ -66,3 +66,22 @@ export const UNRELATED_CHANGELOG = `
 
 - Initial release
 `.trim();
+
+// Fixture: README with a configuration table mentioning model defaults
+export const README_WITH_CONFIG_TABLE = `
+# Knowledge Diff
+
+A GitHub Action that detects documentation drift.
+
+## Configuration
+
+| Input | Default | Description |
+|---|---|---|
+| \`llm-provider\` | \`openai\` | LLM backend: \`openai\`, \`anthropic\`, or \`gemini\`. |
+| \`llm-model\` | \`gpt-4o\` / \`claude-3-5-sonnet-20241022\` / \`gemini-2.5-flash\` | Override the model. |
+| \`sensitivity\` | \`medium\` | Drift threshold: \`low\`, \`medium\`, \`high\`. |
+
+## How It Works
+
+The action parses the PR diff and matches code changes against documentation sections.
+`.trim();
