@@ -111991,7 +111991,7 @@ class LLMClient {
                 { role: "user", content: userPrompt },
             ],
             temperature: 0.1,
-            max_tokens: 1024,
+            max_tokens: 2048,
             response_format: { type: "json_object" },
         }, { timeout: 60000 });
         return response.choices[0]?.message?.content ?? "{}";
@@ -111999,7 +111999,7 @@ class LLMClient {
     async callAnthropic(userPrompt) {
         const response = await this.anthropicClient.messages.create({
             model: this.model,
-            max_tokens: 1024,
+            max_tokens: 2048,
             temperature: 0.1,
             system: SYSTEM_PROMPT,
             messages: [
@@ -112026,7 +112026,7 @@ class LLMClient {
                 config: {
                     systemInstruction: SYSTEM_PROMPT,
                     temperature: 0.1,
-                    maxOutputTokens: 1024,
+                    maxOutputTokens: 2048,
                     responseMimeType: "application/json",
                     abortSignal: controller.signal,
                 },
@@ -112278,6 +112278,12 @@ function parseDocFile(filePath, rawContent) {
  * but we add a guard here to skip candidates whose section content is empty.
  */
 const MAX_SECTION_CHARS = 15000;
+/**
+ * Minimum delay (ms) between consecutive LLM calls to respect API rate limits.
+ * Gemini free tier allows 5 RPM (~12s between calls). We use 1.5s as a reasonable
+ * default that works for paid tiers while reducing 429 storms on free tiers.
+ */
+const RATE_LIMIT_DELAY_MS = 1500;
 // ─── Sensitivity → Confidence Threshold ──────────────────────────────────────
 const CONFIDENCE_ORDER = ["definite", "likely", "possible"];
 function meetsThreshold(confidence, sensitivity) {
@@ -112335,6 +112341,10 @@ class DriftDetector {
                     continue;
                 }
                 core_debug(`  Checking against ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} (score: ${candidate.relevanceScore.toFixed(2)})`);
+                // Rate-limit: pause between LLM calls to stay within API quotas
+                if (totalCandidates > 1) {
+                    await new Promise((res) => setTimeout(res, RATE_LIMIT_DELAY_MS));
+                }
                 let llmResult;
                 try {
                     llmResult = await this.llm.detectDrift(changedFile.filePath, changedFile.patch, candidate.matchedSection.filePath, candidate.matchedSection.heading, candidate.matchedSection.content, this.sensitivity);

@@ -214,7 +214,7 @@ export class LLMClient {
         { role: "user", content: userPrompt },
       ],
       temperature: 0.1,
-      max_tokens: 1024,
+      max_tokens: 2048,
       response_format: { type: "json_object" },
     }, { timeout: 60_000 });
 
@@ -224,7 +224,7 @@ export class LLMClient {
   private async callAnthropic(userPrompt: string): Promise<string> {
     const response = await this.anthropicClient!.messages.create({
       model: this.model,
-      max_tokens: 1024,
+      max_tokens: 2048,
       temperature: 0.1,
       system: SYSTEM_PROMPT,
       messages: [
@@ -252,7 +252,7 @@ export class LLMClient {
         config: {
           systemInstruction: SYSTEM_PROMPT,
           temperature: 0.1,
-          maxOutputTokens: 1024,
+          maxOutputTokens: 2048,
           responseMimeType: "application/json",
           abortSignal: controller.signal,
         },

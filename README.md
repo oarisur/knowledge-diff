@@ -226,11 +226,11 @@ If `auto-patch` is `false`, you only need `pull-requests: write`.
 
 ## Cost Estimate
 
-Each PR run makes approximately **N × 3** LLM calls, where N is the number of changed code files (up to `max-files-per-run`). Each call is a short prompt (~1,500 tokens) + a short completion (~400 tokens).
+Each PR run makes approximately **N × 6** LLM calls, where N is the number of changed code files (up to `max-files-per-run`). Each call is a short prompt (~1,500 tokens) + a short completion (~500 tokens).
 
 For a typical PR changing 5 files:
-- ~15 calls × ~1,900 tokens ≈ ~28,500 tokens
-- **Cost at gpt-4o pricing: ~$0.10 per PR run**
+- ~30 calls × ~2,000 tokens ≈ ~60,000 tokens
+- **Cost at gpt-4o pricing: ~$0.20 per PR run**
 
 Set `max-files-per-run: 10` and `sensitivity: low` to minimise cost on large PRs.
 

@@ -18,6 +18,13 @@ import { parseDocFile, buildDocIndex, findCandidateSections } from "./doc-extrac
  */
 const MAX_SECTION_CHARS = 15_000;
 
+/**
+ * Minimum delay (ms) between consecutive LLM calls to respect API rate limits.
+ * Gemini free tier allows 5 RPM (~12s between calls). We use 1.5s as a reasonable
+ * default that works for paid tiers while reducing 429 storms on free tiers.
+ */
+const RATE_LIMIT_DELAY_MS = 1_500;
+
 // ─── Sensitivity → Confidence Threshold ──────────────────────────────────────
 
 const CONFIDENCE_ORDER = ["definite", "likely", "possible"] as const;
@@ -106,6 +113,11 @@ export class DriftDetector {
         core.debug(
           `  Checking against ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} (score: ${candidate.relevanceScore.toFixed(2)})`
         );
+
+        // Rate-limit: pause between LLM calls to stay within API quotas
+        if (totalCandidates > 1) {
+          await new Promise((res) => setTimeout(res, RATE_LIMIT_DELAY_MS));
+        }
 
         let llmResult;
         try {
