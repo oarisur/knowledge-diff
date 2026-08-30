@@ -32,8 +32,28 @@ function buildCommentBody(
   repoUrl: string
 ): string {
   const actionable = result.driftResults.filter((r) => r.meetsThreshold);
+  const analysisErrors = result.analysisErrors ?? [];
+
+  const errorDetails = analysisErrors.length > 0
+    ? `<details><summary>${analysisErrors.length} analysis error(s)</summary>\n\n${analysisErrors
+        .map((error) => `- ${error.filePath === "*" ? "Run" : `\`${error.filePath}\``}: ${error.message}`)
+        .join("\n")}\n\n</details>`
+    : "";
 
   if (actionable.length === 0) {
+    if (analysisErrors.length > 0) {
+      return `${COMMENT_MARKER}
+## ⚠️ Knowledge Diff — Analysis Incomplete
+
+No documentation drift was reported, but Knowledge Diff could not complete every check. **This is not an all-clear result.**
+
+${errorDetails}
+
+${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.length} file(s) skipped</summary>\n\n${result.skippedFiles.map((f) => `- \`${f}\``).join("\n")}\n\n</details>` : ""}
+
+<sub>🧠 [knowledge-diff](${repoUrl}) • received ${result.driftResults.length}/${result.totalCandidates} candidate result(s)</sub>`;
+    }
+
     return `${COMMENT_MARKER}
 ## ✅ Knowledge Diff — No Rationale Drift Detected
 
@@ -56,6 +76,8 @@ ${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.leng
 ## 🧠 Knowledge Diff — Rationale Drift Detected
 
 I found **${actionable.length}** documentation drift issue(s) in this PR. The code changed, but the docs didn't keep up.
+
+${analysisErrors.length > 0 ? `> ⚠️ **Analysis incomplete:** Some checks failed, so additional drift may exist.\n\n${errorDetails}` : ""}
 
 ---
 `;
@@ -92,8 +114,15 @@ I found **${actionable.length}** documentation drift issue(s) in this PR. The co
     }
   }
 
-  const cleanCount =
-    result.checkedFiles - new Set(actionable.map((r) => r.changedFile.filePath)).size;
+  const failedFiles = new Set(
+    analysisErrors.filter((error) => error.filePath !== "*").map((error) => error.filePath)
+  );
+  const cleanCount = Math.max(
+    0,
+    result.checkedFiles -
+      new Set(actionable.map((r) => r.changedFile.filePath)).size -
+      failedFiles.size
+  );
 
   if (cleanCount > 0) {
     body += `\n*No drift detected in ${cleanCount} other changed file(s).*\n`;

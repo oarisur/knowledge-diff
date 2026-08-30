@@ -110,6 +110,7 @@ const CTX = {
   baseRef: "main",
   headRef: "feature/zustand",
   headOwner: "test-owner",
+  isFork: false,
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -142,6 +143,25 @@ describe("PRCommenter", () => {
       const body = octokit.rest.issues.createComment.mock.calls[0][0].body;
       expect(body).toContain("2 file(s) skipped");
       expect(body).toContain("big.ts");
+    });
+
+    it("never reports all-clear when analysis is incomplete", async () => {
+      const octokit = createMockOctokit();
+      const commenter = new PRCommenter(octokit, CTX, "new");
+
+      const result = makeAnalysisResult({
+        driftResults: [],
+        analysisErrors: [
+          { filePath: "src/store/cart.ts", message: "LLM request timed out" },
+        ],
+      });
+      await commenter.postOrUpdate(result, null);
+
+      const body = octokit.rest.issues.createComment.mock.calls[0][0].body;
+      expect(body).toContain("Analysis Incomplete");
+      expect(body).toContain("not an all-clear");
+      expect(body).toContain("LLM request timed out");
+      expect(body).not.toContain("No Rationale Drift Detected");
     });
   });
 

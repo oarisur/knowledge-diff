@@ -30,7 +30,7 @@ A clear and concise description of what you expected to happen.
 
 **Environment**
  - Runner OS: [e.g. ubuntu-latest]
- - Node version: [e.g. 20]
+ - Node version: [e.g. 24]
  - LLM Provider: [e.g. openai, anthropic, gemini]
 
 **Additional context**

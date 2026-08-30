@@ -3,7 +3,7 @@ import * as github from "@actions/github";
 import type { GitHub } from "@actions/github/lib/utils";
 import { minimatch } from "minimatch";
 
-import type { ActionInputs, PRContext, LLMProvider } from "./types";
+import type { ActionInputs, AnalysisError, PRContext, LLMProvider } from "./types";
 import { parsePRFiles } from "./diff-parser";
 import { LLMClient, withRetry } from "./llm-client";
 import { DriftDetector } from "./drift-detector";
@@ -12,7 +12,7 @@ import { DocPatcher } from "./doc-patcher";
 
 // ─── Input Parsing ────────────────────────────────────────────────────────────
 
-function parseInputs(): ActionInputs {
+function parseInputs(isForkPullRequest = false): ActionInputs {
   const llmProvider = core.getInput("llm-provider") as LLMProvider;
   if (!["openai", "anthropic", "gemini"].includes(llmProvider)) {
     throw new Error(`Invalid llm-provider: "${llmProvider}". Must be "openai", "anthropic", or "gemini".`);
@@ -26,6 +26,9 @@ function parseInputs(): ActionInputs {
       : core.getInput("gemini-api-key");
 
   if (!apiKey) {
+    const forkGuidance = isForkPullRequest
+      ? " Pull requests from forks do not receive repository secrets. Skip this job for fork PRs or use a trusted GitHub App integration."
+      : "";
     throw new Error(
       `API key for "${llmProvider}" is required. Set the "${
         llmProvider === "openai"
@@ -33,7 +36,7 @@ function parseInputs(): ActionInputs {
           : llmProvider === "anthropic"
           ? "anthropic-api-key"
           : "gemini-api-key"
-      }" input.`
+      }" input.${forkGuidance}`
     );
   }
 
@@ -93,6 +96,8 @@ function getPRContext(): PRContext {
   }
 
   const pr = context.payload.pull_request!;
+  const repositoryFullName = `${context.repo.owner}/${context.repo.repo}`;
+  const headRepositoryFullName = pr.head.repo?.full_name;
   return {
     owner: context.repo.owner,
     repo: context.repo.repo,
@@ -102,7 +107,22 @@ function getPRContext(): PRContext {
     baseRef: pr.base.ref,
     headRef: pr.head.ref,
     headOwner: pr.head.repo?.owner?.login ?? context.repo.owner,
+    isFork: headRepositoryFullName
+      ? headRepositoryFullName !== repositoryFullName
+      : (pr.head.repo?.owner?.login ?? context.repo.owner) !== context.repo.owner,
   };
+}
+
+function setOutputs(
+  driftCount: number,
+  patchPRUrl: string,
+  analysisErrorCount: number
+): void {
+  core.setOutput("drift-detected", driftCount > 0 ? "true" : "false");
+  core.setOutput("drift-count", String(driftCount));
+  core.setOutput("patch-pr-url", patchPRUrl);
+  core.setOutput("analysis-complete", analysisErrorCount === 0 ? "true" : "false");
+  core.setOutput("analysis-error-count", String(analysisErrorCount));
 }
 
 // ─── Fetch Doc Files via GitHub API ──────────────────────────────────────────
@@ -113,8 +133,11 @@ async function fetchDocFiles(
   repo: string,
   ref: string,
   globs: string[]
-): Promise<Array<{ filePath: string; content: string }>> {
-  // First, get the full file tree at the base ref
+): Promise<{
+  files: Array<{ filePath: string; content: string }>;
+  errors: AnalysisError[];
+}> {
+  // First, get the full file tree at the requested commit.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: treeData } = await withRetry<any>(
     () =>
@@ -128,6 +151,14 @@ async function fetchDocFiles(
   );
 
   const docFiles: Array<{ filePath: string; content: string }> = [];
+  const errors: AnalysisError[] = [];
+
+  if (treeData.truncated) {
+    const message =
+      "GitHub returned a truncated repository tree, so some configured documentation files may be missing.";
+    core.warning(message);
+    errors.push({ filePath: "*", message });
+  }
 
   for (const item of treeData.tree) {
     if (item.type !== "blob" || !item.path) continue;
@@ -162,27 +193,29 @@ async function fetchDocFiles(
         core.debug(`Loaded doc file: ${item.path} (${content.length} chars)`);
       }
     } catch (err) {
-      core.warning(`Could not fetch doc file ${item.path}: ${err}`);
+      const message = `Could not fetch documentation file: ${err}`;
+      core.warning(`${item.path}: ${message}`);
+      errors.push({ filePath: item.path, message });
     }
   }
 
   core.info(`Loaded ${docFiles.length} documentation file(s).`);
-  return docFiles;
+  return { files: docFiles, errors };
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {
   try {
-    // 1. Parse inputs
-    const inputs = parseInputs();
+    // 1. Read event context before inputs so fork-specific secret failures are clear.
+    const ctx = getPRContext();
+    const inputs = parseInputs(ctx.isFork);
     core.info(
       `knowledge-diff starting (provider: ${inputs.llmProvider}, sensitivity: ${inputs.sensitivity}, auto-patch: ${inputs.autoPatch})`
     );
 
     // 2. Initialise clients
     const octokit = github.getOctokit(inputs.githubToken);
-    const ctx = getPRContext();
     core.info(
       `PR #${ctx.prNumber} in ${ctx.owner}/${ctx.repo} (${ctx.headRef} → ${ctx.baseRef})`
     );
@@ -208,16 +241,17 @@ async function run(): Promise<void> {
 
     if (changedFiles.length === 0) {
       core.info("No code files changed in this PR — nothing to analyse.");
+      setOutputs(0, "", 0);
       return;
     }
 
-    // 5. Fetch documentation files at the base ref
-    core.info("Fetching documentation files…");
-    const docRawFiles = await fetchDocFiles(
+    // 5. Fetch docs from the proposed PR commit so in-PR doc fixes are respected.
+    core.info("Fetching documentation files from the PR head commit…");
+    const { files: docRawFiles, errors: docFetchErrors } = await fetchDocFiles(
       octokit,
       ctx.owner,
       ctx.repo,
-      ctx.baseSha,
+      ctx.headSha,
       inputs.docGlobs
     );
 
@@ -235,6 +269,10 @@ async function run(): Promise<void> {
     );
     const detector = new DriftDetector(llm, inputs.sensitivity);
     const result = await detector.analyse(changedFiles, docRawFiles, skippedFiles);
+    result.analysisErrors = [
+      ...(result.analysisErrors ?? []),
+      ...docFetchErrors,
+    ];
 
     // 7. Auto-patch (if enabled and drift found)
     let patchPR = null;
@@ -257,14 +295,16 @@ async function run(): Promise<void> {
 
     // 9. Set action outputs
     const driftCount = result.driftResults.filter((r) => r.meetsThreshold).length;
-    core.setOutput("drift-detected", driftCount > 0 ? "true" : "false");
-    core.setOutput("drift-count", String(driftCount));
-    core.setOutput(
-      "patch-pr-url",
-      patchPR?.patchPRUrl ?? ""
-    );
+    const analysisErrorCount = result.analysisErrors?.length ?? 0;
+    setOutputs(driftCount, patchPR?.patchPRUrl ?? "", analysisErrorCount);
 
     core.info(`Done. ${driftCount} drift issue(s) flagged.`);
+
+    if (analysisErrorCount > 0) {
+      core.setFailed(
+        `Knowledge Diff analysis was incomplete: ${analysisErrorCount} check(s) failed. See the PR comment and action logs for details.`
+      );
+    }
   } catch (err) {
     if (err instanceof Error) {
       core.setFailed(err.message);

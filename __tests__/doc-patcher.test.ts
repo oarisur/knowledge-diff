@@ -113,6 +113,7 @@ const CTX: PRContext = {
   baseRef: "main",
   headRef: "feature/zustand",
   headOwner: "test-owner",
+  isFork: false,
 };
 
 const { DocPatcher } = require("../src/doc-patcher");

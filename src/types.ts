@@ -28,6 +28,7 @@ export interface PRContext {
   baseRef: string;
   headRef: string;
   headOwner: string; // may differ from owner on forks
+  isFork: boolean;
 }
 
 // ─── Diff Parsing ─────────────────────────────────────────────────────────────
@@ -107,6 +108,14 @@ export interface AnalysisResult {
   checkedFiles: number;
   docFilesChecked: string[];
   totalCandidates: number;
+  /** Failures that prevented one or more files/sections from being analysed. */
+  analysisErrors?: AnalysisError[];
+}
+
+export interface AnalysisError {
+  /** Changed code file affected by the failure, or "*" for a run-level error. */
+  filePath: string;
+  message: string;
 }
 
 // ─── Doc Patching ────────────────────────────────────────────────────────────
@@ -131,4 +140,16 @@ export interface LLMDriftResponse {
   explanation: string;
   staleText?: string;
   suggestedText?: string;
+}
+
+/** One documentation section included in a batched drift request. */
+export interface LLMDocCandidate {
+  docFilePath: string;
+  docHeading: string;
+  docContent: string;
+}
+
+/** A model result tied to its zero-based candidate index. */
+export interface LLMBatchDriftResult extends LLMDriftResponse {
+  candidateIndex: number;
 }

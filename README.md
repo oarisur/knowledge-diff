@@ -22,8 +22,8 @@ A developer refactors state management from Redux to Zustand. The code ships. Th
 On every pull request, Knowledge Diff:
 
 1. **Reads the code diff** — what functions, string literals, and lines were added/removed
-2. **Finds relevant doc sections** — matches changed files/symbols against your README, ARCHITECTURE.md, CLAUDE.md, and any other docs you configure
-3. **Asks an LLM** — *"Does the code change contradict what the doc says?"*
+2. **Finds relevant doc sections** — matches changed files/symbols against project docs and AI-agent instructions such as `AGENTS.md`, `CLAUDE.md`, and Copilot instructions
+3. **Asks an LLM once per changed file** — batches the relevant sections into one structured drift check
 4. **Comments on the PR** — with specific, quote-level detail about what drifted
 5. **Opens a patch PR** *(optional)* — with suggested doc updates ready for your review
 
@@ -58,11 +58,13 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write       # required for auto-patch
+  contents: read        # read the PR and documentation
   pull-requests: write  # required to post comments
 
 jobs:
   check-rationale-drift:
+    # Repository secrets are not available to pull requests from forks.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
       - uses: oarisur/knowledge-diff@v1
@@ -84,8 +86,8 @@ jobs:
 | `anthropic-api-key` | ✅* | — | Anthropic API key. Required when `llm-provider` is `anthropic`. |
 | `gemini-api-key` | ✅* | — | Google Gemini API key. Required when `llm-provider` is `gemini`. |
 | `llm-provider` | ❌ | `openai` | LLM backend: `openai`, `anthropic`, or `gemini`. |
-| `llm-model` | ❌ | `gpt-4o-mini` / `claude-3-5-sonnet-20241022` / `gemini-2.5-flash` | Override the model. |
-| `doc-files` | ❌ | `README.md,ARCHITECTURE.md,CLAUDE.md,docs/**/*.md` | Comma-separated globs of docs to check. |
+| `llm-model` | ❌ | `gpt-4o-mini` / `claude-haiku-4-5-20251001` / `gemini-2.5-flash` | Override the model. |
+| `doc-files` | ❌ | Common project docs and agent instructions | Comma-separated globs of docs to check. See [default document patterns](#default-document-patterns). |
 | `code-extensions` | ❌ | `ts,tsx,js,jsx,py,go,rs,java,cpp,c,rb,php,swift,kt` | File extensions treated as code. |
 | `sensitivity` | ❌ | `medium` | Drift threshold: `low` (definite only) / `medium` / `high` (includes ambiguities). |
 | `auto-patch` | ❌ | `false` | Open a follow-up PR with suggested doc fixes when drift is detected. |
@@ -99,6 +101,22 @@ jobs:
 | `drift-detected` | `"true"` if any drift was found above the sensitivity threshold. |
 | `drift-count` | Number of drift issues found. |
 | `patch-pr-url` | URL of the auto-generated doc patch PR (empty if none created). |
+| `analysis-complete` | `"true"` only when every selected candidate was analysed successfully. |
+| `analysis-error-count` | Number of failures that made the analysis incomplete. |
+
+### Default document patterns
+
+Knowledge Diff checks normal Markdown documentation plus common instruction formats used by coding agents:
+
+```text
+README.md,ARCHITECTURE.md,docs/**/*.md,
+**/AGENTS.md,**/AGENTS.override.md,**/CLAUDE.md,**/GEMINI.md,
+.github/copilot-instructions.md,.github/instructions/**/*.instructions.md,
+.cursor/rules/**/*.mdc,.windsurfrules,.clinerules,.clinerules/**/*.md,
+.roo/rules/**/*.md
+```
+
+Set `doc-files` explicitly to replace this list.
 
 ---
 
@@ -151,6 +169,8 @@ jobs:
     auto-patch: "true"
 ```
 
+Auto-patching also requires `contents: write`. Some organizations separately disable pull-request creation by GitHub Actions; enable that repository or organization setting before using this option.
+
 When drift is detected, a second PR like `docs/knowledge-diff-42-a1b2c3d` is opened targeting the same base branch — with the suggested text replacement applied. You review and merge (or discard) at your discretion.
 
 ### Check only specific docs
@@ -175,14 +195,14 @@ PR opened / push to PR
  [Fetch PR diff]  ──►  changed code files only (by extension)
         │
         ▼
- [Fetch doc files]  ──►  README.md, ARCHITECTURE.md, docs/**/*.md
+ [Fetch PR-head docs] ─►  project docs + AI-agent instruction files
         │
         ▼
  [Keyword index]  ──►  map: symbol/path → doc sections that mention it
         │
         ▼
- [LLM comparison]  ──►  for each (code hunk, candidate doc section):
-        │                 "Does this code change contradict the doc?"
+ [LLM comparison]  ──►  one batched request per changed code file
+        │                 evaluates up to 6 relevant doc sections
         ▼
  [Drift found?]
    ├── YES ──► Post PR comment with quote-level explanation
@@ -204,7 +224,7 @@ Rather than sending entire files to the LLM (expensive, slow), Knowledge Diff:
 1. Splits each doc into sections by heading
 2. Builds a keyword index over all sections
 3. For each changed code file, looks up the **top 6 most relevant sections** by keyword overlap with the changed file path and symbol names
-4. Sends only those sections to the LLM
+4. Sends the code patch and those sections in **one batched request per changed file**
 
 This keeps costs low and avoids irrelevant context diluting the analysis.
 
@@ -212,27 +232,38 @@ This keeps costs low and avoids irrelevant context diluting the analysis.
 
 ## Required Permissions
 
-Add these to your workflow job:
+For comment-only mode, add:
 
 ```yaml
 permissions:
-  contents: write       # create branches for auto-patch
-  pull-requests: write  # post comments, open patch PRs
+  contents: read
+  pull-requests: write
 ```
 
-If `auto-patch` is `false`, you only need `pull-requests: write`.
+For `auto-patch: "true"`, change `contents` to `write`. GitHub Actions must also be allowed to create pull requests in the repository or organization settings.
+
+### Pull requests from forks
+
+GitHub does not pass repository secrets (including LLM API keys) to normal `pull_request` workflows from forks, and the fork's `GITHUB_TOKEN` is normally read-only. Skip the job for fork PRs:
+
+```yaml
+if: github.event.pull_request.head.repo.full_name == github.repository
+```
+
+Do not switch to `pull_request_target` while checking out or executing untrusted pull-request code; that can expose secrets to malicious changes. A hosted GitHub App is the safer way to support untrusted fork PRs.
 
 ---
 
 ## Cost Estimate
 
-Each PR run makes approximately **N × 6** LLM calls, where N is the number of changed code files (up to `max-files-per-run`). Each call is a short prompt (~1,500 tokens) + a short completion (~500 tokens).
+Each PR run makes at most **N LLM calls**, where N is the number of changed code files (up to `max-files-per-run`). Up to six relevant documentation sections are batched into each call.
 
 For a typical PR changing 5 files:
-- ~30 calls × ~2,000 tokens ≈ ~60,000 tokens
-- **Cost at gpt-4o pricing: ~$0.20 per PR run**
+- Up to 5 model requests instead of 30 individual candidate requests
+- Approximately 30,000 input tokens plus 6,000 output tokens in a section-heavy run
+- Roughly **$0.01 at current `gpt-4o-mini` pricing**; actual usage depends on patch and section sizes
 
-Set `max-files-per-run: 10` and `sensitivity: low` to minimise cost on large PRs.
+See [official OpenAI model pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini). Set `max-files-per-run: 10` to cap cost on large PRs.
 
 ---
 

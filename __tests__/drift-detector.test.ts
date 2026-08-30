@@ -18,7 +18,12 @@ jest.mock("../src/llm-client");
 
 function createMockLLM(response: LLMDriftResponse): LLMClient {
   const mock = new LLMClient("openai", "test-key");
-  (mock.detectDrift as jest.Mock) = jest.fn().mockResolvedValue(response);
+  (mock.detectDriftBatch as jest.Mock) = jest.fn().mockImplementation(
+    (_filePath: string, _patch: string, candidates: unknown[]) =>
+      Promise.resolve(
+        candidates.map((_, candidateIndex) => ({ candidateIndex, ...response }))
+      )
+  );
   return mock;
 }
 
@@ -149,6 +154,7 @@ describe("DriftDetector", () => {
     expect(result.checkedFiles).toBe(0);
     expect(result.driftResults).toHaveLength(0);
     expect(result.docFilesChecked).toHaveLength(0);
+    expect(result.analysisErrors).toHaveLength(1);
   });
 
   it("tracks skipped files in the result", async () => {
@@ -177,30 +183,58 @@ describe("DriftDetector", () => {
 
     // At least 1 candidate should be found for the cart.ts file
     expect(result.totalCandidates).toBeGreaterThanOrEqual(1);
-    // And the LLM should have been called for each candidate
-    expect((llm.detectDrift as jest.Mock).mock.calls.length).toBe(
+    // All candidates for the changed file are sent in one model request.
+    expect(llm.detectDriftBatch as jest.Mock).toHaveBeenCalledTimes(1);
+    expect((llm.detectDriftBatch as jest.Mock).mock.calls[0][2]).toHaveLength(
       result.totalCandidates
     );
   });
 
-  it("continues analysis when LLM throws for a candidate", async () => {
+  it("continues analysis and records an incomplete file when the LLM throws", async () => {
     const llm = new LLMClient("openai", "test-key");
-    // First call throws, second call succeeds
-    (llm.detectDrift as jest.Mock) = jest.fn()
-      .mockRejectedValueOnce(new Error("API timeout"))
-      .mockResolvedValue({
-        isDrift: false,
-        confidence: "possible",
-        explanation: "No drift.",
-      });
+    (llm.detectDriftBatch as jest.Mock) = jest
+      .fn()
+      .mockRejectedValue(new Error("API timeout"));
 
     const detector = new DriftDetector(llm, "medium");
     const result = await detector.analyse(makeCodeFiles(), makeDocFiles(), []);
 
-    // Should not throw — the failed candidate is skipped
+    // Should not throw — other changed files can still be analysed.
     expect(result.checkedFiles).toBe(1);
-    // The total candidates were still counted even though one threw
     expect(result.totalCandidates).toBeGreaterThanOrEqual(1);
+    expect(result.analysisErrors).toEqual([
+      expect.objectContaining({
+        filePath: "src/store/cart.ts",
+        message: expect.stringContaining("API timeout"),
+      }),
+    ]);
+  });
+
+  it("records omitted candidate results instead of treating them as clean", async () => {
+    const llm = new LLMClient("openai", "test-key");
+    (llm.detectDriftBatch as jest.Mock) = jest.fn().mockResolvedValue([
+      {
+        candidateIndex: 0,
+        isDrift: false,
+        confidence: "possible",
+        explanation: "No drift.",
+      },
+    ]);
+
+    const detector = new DriftDetector(llm, "medium");
+    const result = await detector.analyse(
+      makeCodeFiles(),
+      [{
+        filePath: "README.md",
+        content:
+          README_WITH_REDUX +
+          "\n\n## Cart Architecture\n\nThe cart store uses createSlice in src/store/cart.ts.",
+      }],
+      []
+    );
+
+    expect(result.totalCandidates).toBeGreaterThan(1);
+    expect(result.analysisErrors?.length).toBe(result.totalCandidates - 1);
   });
 
   it("returns empty results when no code files are provided", async () => {
@@ -215,7 +249,6 @@ describe("DriftDetector", () => {
 
     expect(result.checkedFiles).toBe(0);
     expect(result.driftResults).toHaveLength(0);
-    expect((llm.detectDrift as jest.Mock)).not.toHaveBeenCalled();
+    expect(llm.detectDriftBatch as jest.Mock).not.toHaveBeenCalled();
   });
 });
-

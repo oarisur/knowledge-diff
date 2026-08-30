@@ -64,7 +64,7 @@ jest.mock("@actions/github", () => ({
 // Mock the imported modules — we test index.ts wiring, not the internals
 jest.mock("../src/llm-client", () => ({
   LLMClient: jest.fn().mockImplementation(() => ({
-    detectDrift: jest.fn(),
+    detectDriftBatch: jest.fn(),
   })),
   withRetry: jest.fn().mockImplementation((fn: () => unknown) => fn()),
 }));
@@ -147,13 +147,18 @@ function setupDocTree(docPaths: string[]) {
   });
 }
 
-function setupDriftResult(driftResults: unknown[] = [], skippedFiles: string[] = []) {
+function setupDriftResult(
+  driftResults: unknown[] = [],
+  skippedFiles: string[] = [],
+  analysisErrors: Array<{ filePath: string; message: string }> = []
+) {
   const mockAnalyse = jest.fn().mockResolvedValue({
     driftResults,
     skippedFiles,
     checkedFiles: 1,
     docFilesChecked: ["README.md"],
     totalCandidates: driftResults.length,
+    analysisErrors,
   });
 
   (DriftDetector as jest.Mock).mockImplementation(() => ({
@@ -190,6 +195,7 @@ describe("index.ts — run()", () => {
     expect(mockSetOutput).toHaveBeenCalledWith("drift-detected", "false");
     expect(mockSetOutput).toHaveBeenCalledWith("drift-count", "0");
     expect(mockSetOutput).toHaveBeenCalledWith("patch-pr-url", "");
+    expect(mockSetOutput).toHaveBeenCalledWith("analysis-complete", "true");
   });
 
   it("sets drift-detected=true when drift is found", async () => {
@@ -289,8 +295,10 @@ describe("index.ts — run()", () => {
 
     await new Promise((r) => setTimeout(r, 100));
 
-    // Should NOT have set outputs or called setFailed
+    // A no-op run still produces deterministic outputs.
     expect(mockSetFailed).not.toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith("drift-detected", "false");
+    expect(mockSetOutput).toHaveBeenCalledWith("analysis-complete", "true");
     // DriftDetector should not have been constructed
     expect(DriftDetector).not.toHaveBeenCalled();
   });
@@ -331,5 +339,48 @@ describe("index.ts — run()", () => {
     await new Promise((r) => setTimeout(r, 100));
 
     expect(mockSetSecret).toHaveBeenCalledWith("sk-secret-key-123");
+  });
+
+  it("fails the action after posting partial results when analysis is incomplete", async () => {
+    setupInputs();
+    setupPRFiles([
+      { filename: "src/app.ts", patch: "+const x = 1;", status: "modified" },
+    ]);
+    setupDocTree(["README.md"]);
+    setupDriftResult([], [], [
+      { filePath: "src/app.ts", message: "LLM analysis failed: timeout" },
+    ]);
+
+    jest.isolateModules(() => {
+      require("../src/index");
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(PRCommenter).toHaveBeenCalled();
+    expect(mockSetOutput).toHaveBeenCalledWith("analysis-complete", "false");
+    expect(mockSetOutput).toHaveBeenCalledWith("analysis-error-count", "1");
+    expect(mockSetFailed).toHaveBeenCalledWith(
+      expect.stringContaining("analysis was incomplete")
+    );
+  });
+
+  it("loads documentation from the PR head commit", async () => {
+    setupInputs();
+    setupPRFiles([
+      { filename: "src/app.ts", patch: "+const x = 1;", status: "modified" },
+    ]);
+    setupDocTree(["README.md"]);
+    setupDriftResult([]);
+
+    jest.isolateModules(() => {
+      require("../src/index");
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect(mockGetTree).toHaveBeenCalledWith(
+      expect.objectContaining({ tree_sha: "abc1234567890" })
+    );
   });
 });

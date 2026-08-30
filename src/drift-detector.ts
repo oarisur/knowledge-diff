@@ -1,31 +1,14 @@
 import * as core from "@actions/core";
 import type {
-  DriftResult,
-  Sensitivity,
+  AnalysisError,
   AnalysisResult,
   ChangedFile,
   DocFile,
+  DriftResult,
+  Sensitivity,
 } from "./types";
 import { LLMClient } from "./llm-client";
 import { parseDocFile, buildDocIndex, findCandidateSections } from "./doc-extractor";
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-/**
- * Maximum chars of doc content to send per LLM call.
- * llm-client already truncates patch to 4000 and doc to 3000 individually,
- * but we add a guard here to skip candidates whose section content is empty.
- */
-const MAX_SECTION_CHARS = 15_000;
-
-/**
- * Minimum delay (ms) between consecutive LLM calls to respect API rate limits.
- * Gemini free tier allows 5 RPM (~12s between calls). We use 1.5s as a reasonable
- * default that works for paid tiers while reducing 429 storms on free tiers.
- */
-const RATE_LIMIT_DELAY_MS = 1_500;
-
-// ─── Sensitivity → Confidence Threshold ──────────────────────────────────────
 
 const CONFIDENCE_ORDER = ["definite", "likely", "possible"] as const;
 
@@ -33,16 +16,16 @@ function meetsThreshold(
   confidence: "definite" | "likely" | "possible",
   sensitivity: Sensitivity
 ): boolean {
-  // low: only definite
-  // medium: definite + likely
-  // high: all
   const thresholds: Record<Sensitivity, number> = {
-    low: 0,      // only index 0 (definite)
-    medium: 1,   // index 0-1
-    high: 2,     // all
+    low: 0,
+    medium: 1,
+    high: 2,
   };
-  const resultIndex = CONFIDENCE_ORDER.indexOf(confidence);
-  return resultIndex <= thresholds[sensitivity];
+  return CONFIDENCE_ORDER.indexOf(confidence) <= thresholds[sensitivity];
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
 }
 
 // ─── Main Drift Detector ──────────────────────────────────────────────────────
@@ -58,36 +41,38 @@ export class DriftDetector {
 
   /**
    * Run drift detection across all changed code files against all doc files.
-   * Returns a full AnalysisResult including all drift findings and metadata.
+   * Each changed file is evaluated in one batched LLM request containing up to
+   * six relevant documentation sections.
    */
   async analyse(
     changedFiles: ChangedFile[],
     docRawFiles: Array<{ filePath: string; content: string }>,
     skippedFiles: string[]
   ): Promise<AnalysisResult> {
-    // Parse all doc files
-    const docFiles: DocFile[] = docRawFiles.map((f) =>
-      parseDocFile(f.filePath, f.content)
+    const docFiles: DocFile[] = docRawFiles.map((file) =>
+      parseDocFile(file.filePath, file.content)
     );
 
     if (docFiles.length === 0) {
-      core.warning("No documentation files found — nothing to check against.");
+      const message = "No documentation files were found, so drift analysis could not run.";
+      core.warning(message);
       return {
         driftResults: [],
         skippedFiles,
         checkedFiles: 0,
         docFilesChecked: [],
         totalCandidates: 0,
+        analysisErrors: [{ filePath: "*", message }],
       };
     }
 
-    // Build inverted keyword index over all doc sections
     const docIndex = buildDocIndex(docFiles);
     core.info(
-      `Doc index built: ${docFiles.reduce((n, d) => n + d.sections.length, 0)} sections across ${docFiles.length} files.`
+      `Doc index built: ${docFiles.reduce((count, doc) => count + doc.sections.length, 0)} sections across ${docFiles.length} files.`
     );
 
     const allDriftResults: DriftResult[] = [];
+    const analysisErrors: AnalysisError[] = [];
     let totalCandidates = 0;
 
     for (const changedFile of changedFiles) {
@@ -102,42 +87,49 @@ export class DriftDetector {
       }
 
       for (const candidate of candidates) {
-        // Guard: skip extremely large doc sections
-        if (candidate.matchedSection.content.length > MAX_SECTION_CHARS) {
-          core.debug(
-            `  Skipping ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} — content too large (${candidate.matchedSection.content.length} chars)`
-          );
-          continue;
-        }
-
         core.debug(
-          `  Checking against ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} (score: ${candidate.relevanceScore.toFixed(2)})`
+          `  Candidate ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading} (score: ${candidate.relevanceScore.toFixed(2)})`
         );
+      }
 
-        // Rate-limit: pause between LLM calls to stay within API quotas
-        if (totalCandidates > 1) {
-          await new Promise((res) => setTimeout(res, RATE_LIMIT_DELAY_MS));
-        }
+      let batchResults;
+      try {
+        batchResults = await this.llm.detectDriftBatch(
+          changedFile.filePath,
+          changedFile.patch,
+          candidates.map((candidate) => ({
+            docFilePath: candidate.matchedSection.filePath,
+            docHeading: candidate.matchedSection.heading,
+            docContent: candidate.matchedSection.content,
+          })),
+          this.sensitivity
+        );
+      } catch (err) {
+        const message = `LLM analysis failed: ${errorMessage(err)}`;
+        core.warning(`  ${changedFile.filePath}: ${message}`);
+        analysisErrors.push({ filePath: changedFile.filePath, message });
+        continue;
+      }
 
-        let llmResult;
-        try {
-          llmResult = await this.llm.detectDrift(
-            changedFile.filePath,
-            changedFile.patch,
-            candidate.matchedSection.filePath,
-            candidate.matchedSection.heading,
-            candidate.matchedSection.content,
-            this.sensitivity
-          );
-        } catch (err) {
-          core.warning(
-            `  LLM call failed for candidate ${candidate.matchedSection.filePath}#${candidate.matchedSection.heading}: ${err}`
-          );
+      const resultsByIndex = new Map(
+        batchResults.map((result) => [result.candidateIndex, result])
+      );
+
+      for (let candidateIndex = 0; candidateIndex < candidates.length; candidateIndex++) {
+        const candidate = candidates[candidateIndex];
+        const llmResult = resultsByIndex.get(candidateIndex);
+
+        if (!llmResult) {
+          const message =
+            `LLM response omitted documentation candidate ${candidateIndex} ` +
+            `(${candidate.matchedSection.filePath}#${candidate.matchedSection.heading}).`;
+          core.warning(`  ${changedFile.filePath}: ${message}`);
+          analysisErrors.push({ filePath: changedFile.filePath, message });
           continue;
         }
 
-        const meetsThresh = llmResult.isDrift &&
-          meetsThreshold(llmResult.confidence, this.sensitivity);
+        const meetsThresh =
+          llmResult.isDrift && meetsThreshold(llmResult.confidence, this.sensitivity);
 
         allDriftResults.push({
           changedFile,
@@ -158,17 +150,18 @@ export class DriftDetector {
       }
     }
 
-    const actionableDrift = allDriftResults.filter((r) => r.meetsThreshold);
+    const actionableDrift = allDriftResults.filter((result) => result.meetsThreshold);
     core.info(
-      `Analysis complete. ${actionableDrift.length} drift(s) found across ${totalCandidates} candidate pairs.`
+      `Analysis complete. ${actionableDrift.length} drift(s) found across ${totalCandidates} candidate pairs; ${analysisErrors.length} analysis error(s).`
     );
 
     return {
       driftResults: allDriftResults,
       skippedFiles,
       checkedFiles: changedFiles.length,
-      docFilesChecked: docFiles.map((d) => d.filePath),
+      docFilesChecked: docFiles.map((doc) => doc.filePath),
       totalCandidates,
+      analysisErrors,
     };
   }
 }

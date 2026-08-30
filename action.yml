@@ -32,14 +32,14 @@ inputs:
     default: "openai"
 
   llm-model:
-    description: "Override the default model. Defaults: openai→gpt-4o, anthropic→claude-3-5-sonnet-20241022, gemini→gemini-2.5-flash."
+    description: "Override the default model. Defaults: openai→gpt-4o-mini, anthropic→claude-haiku-4-5-20251001, gemini→gemini-2.5-flash."
     required: false
     default: ""
 
   doc-files:
-    description: "Comma-separated glob patterns of documentation files to check against."
+    description: "Comma-separated glob patterns of documentation and AI-agent instruction files to check against."
     required: false
-    default: "README.md,ARCHITECTURE.md,CLAUDE.md,docs/**/*.md"
+    default: "README.md,ARCHITECTURE.md,docs/**/*.md,**/AGENTS.md,**/AGENTS.override.md,**/CLAUDE.md,**/GEMINI.md,.github/copilot-instructions.md,.github/instructions/**/*.instructions.md,.cursor/rules/**/*.mdc,.windsurfrules,.clinerules,.clinerules/**/*.md,.roo/rules/**/*.md"
 
   code-extensions:
     description: "Comma-separated list of file extensions to treat as code."
@@ -67,7 +67,7 @@ inputs:
     default: "20"
 
 runs:
-  using: "node20"
+  using: "node24"
   main: "dist/index.js"
 
 outputs:
@@ -77,3 +77,7 @@ outputs:
     description: "Number of drift issues detected."
   patch-pr-url:
     description: "URL of the auto-generated documentation patch PR. Empty string if auto-patch is disabled or no patchable drift was found."
+  analysis-complete:
+    description: "'true' only if every selected documentation candidate was analysed successfully."
+  analysis-error-count:
+    description: "Number of failures that made the analysis incomplete."

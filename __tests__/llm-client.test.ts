@@ -1,4 +1,15 @@
-import { buildDriftPrompt, withRetry, LLMClient } from "../src/llm-client";
+import {
+  buildDriftBatchPrompt,
+  buildDriftPrompt,
+  withRetry,
+  LLMClient,
+} from "../src/llm-client";
+
+const fastRetryOptions = {
+  baseDelayMs: 1,
+  maxDelayMs: 1,
+  sleep: async () => undefined,
+};
 
 // Suppress @actions/core logging during tests
 jest.mock("@actions/core", () => ({
@@ -149,12 +160,31 @@ describe("buildDriftPrompt", () => {
   });
 });
 
+describe("buildDriftBatchPrompt", () => {
+  it("includes multiple numbered documentation candidates", () => {
+    const prompt = buildDriftBatchPrompt(
+      "src/app.ts",
+      "+new behavior",
+      [
+        { docFilePath: "README.md", docHeading: "Usage", docContent: "Old usage" },
+        { docFilePath: "AGENTS.md", docHeading: "Rules", docContent: "Old rule" },
+      ],
+      "medium"
+    );
+
+    expect(prompt).toContain("Candidate 0");
+    expect(prompt).toContain("Candidate 1");
+    expect(prompt).toContain("AGENTS.md");
+    expect(prompt).toContain('"results"');
+  });
+});
+
 // ─── withRetry ────────────────────────────────────────────────────────────────
 
 describe("withRetry", () => {
   it("returns result on first successful call", async () => {
     const fn = jest.fn().mockResolvedValue("success");
-    const result = await withRetry(fn, "test");
+    const result = await withRetry(fn, "test", fastRetryOptions);
     expect(result).toBe("success");
     expect(fn).toHaveBeenCalledTimes(1);
   });
@@ -174,7 +204,7 @@ describe("withRetry", () => {
       .mockRejectedValueOnce(networkErr)
       .mockResolvedValue("recovered");
 
-    const result = await withRetry(fn, "test");
+    const result = await withRetry(fn, "test", fastRetryOptions);
     expect(result).toBe("recovered");
     expect(fn).toHaveBeenCalledTimes(2);
   }, 15000);
@@ -186,10 +216,31 @@ describe("withRetry", () => {
       .mockRejectedValueOnce(timeoutErr)
       .mockResolvedValue("ok");
 
-    const result = await withRetry(fn, "test");
+    const result = await withRetry(fn, "test", fastRetryOptions);
     expect(result).toBe("ok");
     expect(fn).toHaveBeenCalledTimes(2);
   }, 15000);
+
+  it("honors provider retry-after guidance", async () => {
+    const rateLimitErr = Object.assign(new Error("Rate limited"), {
+      status: 429,
+      headers: { "retry-after-ms": "2500" },
+    });
+    const fn = jest
+      .fn()
+      .mockRejectedValueOnce(rateLimitErr)
+      .mockResolvedValue("ok");
+    const sleep = jest.fn().mockResolvedValue(undefined);
+
+    await expect(
+      withRetry(fn, "test", {
+        baseDelayMs: 1,
+        maxDelayMs: 5000,
+        sleep,
+      })
+    ).resolves.toBe("ok");
+    expect(sleep).toHaveBeenCalledWith(2500);
+  });
 });
 
 // ─── LLMClient.detectDrift ────────────────────────────────────────────────────
@@ -314,7 +365,7 @@ describe("LLMClient", () => {
       expect(result.explanation).toContain("Gemini explains");
     });
 
-    it("returns safe defaults on unparseable response", async () => {
+    it("fails closed on an unparseable response", async () => {
       const OpenAI = require("openai");
       const mockCreate = jest.fn().mockResolvedValue({
         choices: [{ message: { content: "this is not json at all" } }],
@@ -325,21 +376,19 @@ describe("LLMClient", () => {
       }));
 
       const client = new LLMClient("openai", "test-key");
-      const result = await client.detectDrift(
-        "file.ts",
-        "patch",
-        "doc.md",
-        "Section",
-        "content",
-        "medium"
-      );
-
-      expect(result.isDrift).toBe(false);
-      expect(result.confidence).toBe("possible");
-      expect(result.explanation).toContain("Could not parse");
+      await expect(
+        client.detectDrift(
+          "file.ts",
+          "patch",
+          "doc.md",
+          "Section",
+          "content",
+          "medium"
+        )
+      ).rejects.toThrow("Could not parse");
     });
 
-    it("returns safe defaults on empty OpenAI response", async () => {
+    it("fails closed on an empty OpenAI response", async () => {
       const OpenAI = require("openai");
       const mockCreate = jest.fn().mockResolvedValue({
         choices: [{ message: { content: null } }],
@@ -350,20 +399,19 @@ describe("LLMClient", () => {
       }));
 
       const client = new LLMClient("openai", "test-key");
-      const result = await client.detectDrift(
-        "file.ts",
-        "patch",
-        "doc.md",
-        "Section",
-        "content",
-        "medium"
-      );
-
-      // Empty JSON {} → isDrift: false
-      expect(result.isDrift).toBe(false);
+      await expect(
+        client.detectDrift(
+          "file.ts",
+          "patch",
+          "doc.md",
+          "Section",
+          "content",
+          "medium"
+        )
+      ).rejects.toThrow("Could not parse");
     });
 
-    it("returns safe defaults when LLM call throws", async () => {
+    it("propagates provider failures after retries are exhausted", async () => {
       const OpenAI = require("openai");
       const mockCreate = jest.fn().mockRejectedValue(new Error("API down"));
 
@@ -372,17 +420,16 @@ describe("LLMClient", () => {
       }));
 
       const client = new LLMClient("openai", "test-key");
-      const result = await client.detectDrift(
-        "file.ts",
-        "patch",
-        "doc.md",
-        "Section",
-        "content",
-        "medium"
-      );
-
-      expect(result.isDrift).toBe(false);
-      expect(result.explanation).toContain("LLM call failed");
+      await expect(
+        client.detectDrift(
+          "file.ts",
+          "patch",
+          "doc.md",
+          "Section",
+          "content",
+          "medium"
+        )
+      ).rejects.toThrow("API down");
     });
 
     it("handles valid JSON drift response from Anthropic", async () => {
@@ -446,7 +493,7 @@ describe("LLMClient", () => {
       expect(result.confidence).toBe("possible");
     });
 
-    it("handles Anthropic non-text content block", async () => {
+    it("fails closed on an Anthropic non-text content block", async () => {
       const Anthropic = require("@anthropic-ai/sdk");
       const mockCreate = jest.fn().mockResolvedValue({
         content: [{ type: "tool_use", id: "123", name: "test", input: {} }],
@@ -457,17 +504,48 @@ describe("LLMClient", () => {
       }));
 
       const client = new LLMClient("anthropic", "test-key");
-      const result = await client.detectDrift(
-        "file.ts",
-        "patch",
-        "doc.md",
-        "Section",
-        "content",
+      await expect(
+        client.detectDrift(
+          "file.ts",
+          "patch",
+          "doc.md",
+          "Section",
+          "content",
+          "medium"
+        )
+      ).rejects.toThrow("Could not parse");
+    });
+
+    it("parses a batched response in a single provider call", async () => {
+      const OpenAI = require("openai");
+      const mockCreate = jest.fn().mockResolvedValue({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              results: [
+                { candidateIndex: 0, isDrift: false, confidence: "possible", explanation: "Still correct." },
+                { candidateIndex: 1, isDrift: true, confidence: "definite", explanation: "Rule changed." },
+              ],
+            }),
+          },
+        }],
+      });
+      OpenAI.mockImplementation(() => ({ chat: { completions: { create: mockCreate } } }));
+
+      const client = new LLMClient("openai", "test-key");
+      const results = await client.detectDriftBatch(
+        "src/app.ts",
+        "+changed",
+        [
+          { docFilePath: "README.md", docHeading: "Usage", docContent: "Usage" },
+          { docFilePath: "AGENTS.md", docHeading: "Rules", docContent: "Rules" },
+        ],
         "medium"
       );
 
-      // Returns empty JSON defaults
-      expect(result.isDrift).toBe(false);
+      expect(mockCreate).toHaveBeenCalledTimes(1);
+      expect(results).toHaveLength(2);
+      expect(results[1]).toMatchObject({ candidateIndex: 1, isDrift: true });
     });
   });
 });
@@ -479,10 +557,9 @@ describe("withRetry — exhaustion", () => {
     const retryableErr = new Error("fetch failed");
     const fn = jest.fn().mockRejectedValue(retryableErr);
 
-    await expect(withRetry(fn, "test")).rejects.toThrow("fetch failed");
-    // MAX_RETRIES is 4, so 5 total attempts (0..4)
-    expect(fn).toHaveBeenCalledTimes(5);
-  }, 30000);
+    await expect(withRetry(fn, "test", fastRetryOptions)).rejects.toThrow("fetch failed");
+    expect(fn).toHaveBeenCalledTimes(4);
+  });
 
   it("retries on HTTP 429 status errors", async () => {
     const rateLimitErr = Object.assign(new Error("Rate limited"), { status: 429 });
@@ -491,9 +568,8 @@ describe("withRetry — exhaustion", () => {
       .mockRejectedValueOnce(rateLimitErr)
       .mockResolvedValue("ok");
 
-    const result = await withRetry(fn, "test");
+    const result = await withRetry(fn, "test", fastRetryOptions);
     expect(result).toBe("ok");
     expect(fn).toHaveBeenCalledTimes(2);
-  }, 15000);
+  });
 });
-
