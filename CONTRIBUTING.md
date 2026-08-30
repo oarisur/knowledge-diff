@@ -20,6 +20,7 @@ npm install
 npm run typecheck   # TypeScript strict checks
 npm run lint        # ESLint
 npm test            # Jest unit tests
+npm run evaluate:gate # deterministic candidate-retrieval quality gate
 npm run build       # Bundle to dist/ via ncc
 ```
 
@@ -39,6 +40,7 @@ npm run build       # Bundle to dist/ via ncc
 - Test fixtures go in `__tests__/fixtures/`.
 - Mock `@actions/core` in every test file to suppress CI logging.
 - Aim for high coverage on pure-logic modules; mock external APIs (LLM, GitHub).
+- Add anonymized false positives and false negatives to `evaluation/benchmark.v1.json` so they remain fixed regressions.
 
 ## Reporting Issues
 

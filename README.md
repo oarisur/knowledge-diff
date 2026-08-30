@@ -254,6 +254,40 @@ Do not switch to `pull_request_target` while checking out or executing untrusted
 
 ---
 
+## Quality Evaluation
+
+Knowledge Diff includes a versioned benchmark with **30 hand-labeled cases**: 15 real documentation contradictions and 15 relevant-but-harmless changes. It measures candidate retrieval separately from model classification so a mocked LLM cannot create a misleading quality score.
+
+Run the deterministic retrieval gate used by CI:
+
+```bash
+npm run evaluate:gate
+```
+
+Run the complete benchmark against a live provider after setting the corresponding `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GEMINI_API_KEY` environment variable:
+
+```bash
+npm run evaluate -- --provider openai --gate --output evaluation/results/openai.json
+npm run evaluate -- --provider anthropic --gate --output evaluation/results/anthropic.json
+npm run evaluate -- --provider gemini --gate --output evaluation/results/gemini.json
+```
+
+Live reports include candidate-level precision, recall, F1, false-positive rate, correct-target recall, latency, estimated token usage, and estimated cost. The default release thresholds are:
+
+| Metric | Required |
+|---|---:|
+| Retrieval recall@6 | ≥ 95% |
+| Candidate precision | ≥ 85% |
+| Candidate recall | ≥ 80% |
+| Correct positive target recall | ≥ 80% |
+| Provider failure rate | ≤ 5% |
+
+Use `--tag`, `--max-cases`, custom threshold flags, or `--model` for focused comparisons. Custom models need `--input-price` and `--output-price` for cost estimates. See [the evaluation guide](evaluation/README.md) for metric definitions and instructions for adding anonymized real-world cases.
+
+The bundled cases are a reproducible starting benchmark, not a substitute for beta-repository evidence. Before a commercial launch, add anonymized mistakes and non-issues from real pull requests and keep the resulting provider reports as release artifacts.
+
+---
+
 ## Cost Estimate
 
 Each PR run makes at most **N LLM calls**, where N is the number of changed code files (up to `max-files-per-run`). Up to six relevant documentation sections are batched into each call.

@@ -233,9 +233,9 @@ export type { DocIndex };
 /**
  * Parse a raw markdown string into a DocFile with sections and keywords.
  */
-export function parseDocFile(filePath: string, rawContent: string): DocFile {
-  core.debug(`Parsing doc file: ${filePath}`);
+export function parseDocFile(filePath: string, rawContent: string, silent = false): DocFile {
+  if (!silent) core.debug(`Parsing doc file: ${filePath}`);
   const sections = splitIntoSections(filePath, rawContent);
-  core.debug(`  → ${sections.length} sections`);
+  if (!silent) core.debug(`  → ${sections.length} sections`);
   return { filePath, rawContent, sections };
 }

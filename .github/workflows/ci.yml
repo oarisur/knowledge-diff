@@ -36,6 +36,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Evaluate candidate retrieval quality
+        run: npm run evaluate:gate
+
       - name: Build
         run: npm run build
 

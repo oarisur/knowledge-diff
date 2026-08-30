@@ -80619,7 +80619,7 @@ function estimateTokens(text) {
  * Converts raw GitHub PR file list into structured ChangedFile objects.
  * The `files` parameter should come from `octokit.pulls.listFiles()`.
  */
-function parsePRFiles(files, allowedExtensions, maxFiles) {
+function parsePRFiles(files, allowedExtensions, maxFiles, silent = false) {
     const changedFiles = [];
     const skippedFiles = [];
     let processed = 0;
@@ -80633,7 +80633,8 @@ function parsePRFiles(files, allowedExtensions, maxFiles) {
             continue; // silently skip non-code files (doc files themselves, images, etc.)
         }
         if (!file.patch) {
-            core_debug(`No patch data for ${file.filename}, skipping.`);
+            if (!silent)
+                core_debug(`No patch data for ${file.filename}, skipping.`);
             skippedFiles.push(`${file.filename} (no patch data)`);
             continue;
         }
@@ -80657,7 +80658,9 @@ function parsePRFiles(files, allowedExtensions, maxFiles) {
         });
         processed++;
     }
-    info(`Diff parser: ${changedFiles.length} code files to analyse, ${skippedFiles.length} skipped.`);
+    if (!silent) {
+        info(`Diff parser: ${changedFiles.length} code files to analyse, ${skippedFiles.length} skipped.`);
+    }
     return { changedFiles, skippedFiles };
 }
 
@@ -113522,10 +113525,12 @@ function buildDocIndex(docFiles) {
 /**
  * Parse a raw markdown string into a DocFile with sections and keywords.
  */
-function parseDocFile(filePath, rawContent) {
-    core_debug(`Parsing doc file: ${filePath}`);
+function parseDocFile(filePath, rawContent, silent = false) {
+    if (!silent)
+        core_debug(`Parsing doc file: ${filePath}`);
     const sections = splitIntoSections(filePath, rawContent);
-    core_debug(`  → ${sections.length} sections`);
+    if (!silent)
+        core_debug(`  → ${sections.length} sections`);
     return { filePath, rawContent, sections };
 }
 

@@ -1,0 +1,287 @@
+{
+  "name": "knowledge-diff-core",
+  "version": "1.0.0",
+  "description": "Balanced, hand-labeled code/documentation changes covering architecture, configuration, API, security, and harmless refactors.",
+  "sharedDocs": [
+    {
+      "filePath": "docs/engineering-guide.md",
+      "content": "# Engineering Guide\n\n## Monitoring\nApplication logs are emitted by `src/monitoring/logger.ts`. Monitoring changes should preserve structured JSON output.\n\n## Testing\nUnit tests live beside the code they cover and should remain deterministic.\n\n## Deployment\nProduction services run in containers and expose health checks."
+    },
+    {
+      "filePath": "CHANGELOG.md",
+      "content": "# Changelog\n\n## Unreleased\nRoutine maintenance, dependency updates, and test improvements."
+    }
+  ],
+  "cases": [
+    {
+      "id": "drift-state-redux-zustand",
+      "description": "State management changes from Redux Toolkit to Zustand while architecture docs still require Redux.",
+      "tags": ["architecture", "typescript", "migration"],
+      "codeFilePath": "src/store/cart.ts",
+      "patch": "@@ -1,3 +1,3 @@\n-import { createSlice } from 'redux';\n-const cartSlice = createSlice({ name: 'cart' });\n+import { create } from 'zustand';\n+export const useCartStore = create(() => ({ items: [] }));",
+      "docs": [{ "filePath": "ARCHITECTURE.md", "content": "# Architecture\n\n## State Management\nAll global state uses Redux Toolkit. The cart is implemented as `src/store/cart.ts` with `createSlice`; Zustand is not used." }],
+      "expected": { "isDrift": true, "docFilePath": "ARCHITECTURE.md" }
+    },
+    {
+      "id": "drift-api-v1-v2",
+      "description": "A documented endpoint moves from API v1 to v2.",
+      "tags": ["api", "typescript", "configuration"],
+      "codeFilePath": "src/routes/users.ts",
+      "patch": "@@ -4,1 +4,1 @@\n-router.get('/api/v1/users', listUsers);\n+router.get('/api/v2/users', listUsers);",
+      "docs": [{ "filePath": "docs/api.md", "content": "# API\n\n## Users\nClients must call `/api/v1/users`, implemented in `src/routes/users.ts`. Version 1 is the only supported users endpoint." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/api.md" }
+    },
+    {
+      "id": "drift-postgres-mongodb",
+      "description": "Primary persistence changes from PostgreSQL to MongoDB.",
+      "tags": ["database", "typescript", "migration"],
+      "codeFilePath": "src/db/users.ts",
+      "patch": "@@ -1,2 +1,2 @@\n-import { Pool } from 'pg';\n-export const users = new Pool();\n+import { MongoClient } from 'mongodb';\n+export const users = new MongoClient(process.env.MONGO_URI!);",
+      "docs": [{ "filePath": "docs/database.md", "content": "# Database\n\n## User storage\nUser records in `src/db/users.ts` are stored exclusively in PostgreSQL through the `pg` Pool. MongoDB is not part of the system." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/database.md" }
+    },
+    {
+      "id": "drift-cache-ttl",
+      "description": "Cache lifetime falls from one hour to five minutes despite an exact documented guarantee.",
+      "tags": ["configuration", "typescript", "performance"],
+      "codeFilePath": "src/cache/config.ts",
+      "patch": "@@ -2,1 +2,1 @@\n-export const CACHE_TTL_SECONDS = 3600;\n+export const CACHE_TTL_SECONDS = 300;",
+      "docs": [{ "filePath": "docs/caching.md", "content": "# Caching\n\n## Expiration\n`CACHE_TTL_SECONDS` in `src/cache/config.ts` is fixed at `3600`, so cached entries remain valid for one hour." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/caching.md" }
+    },
+    {
+      "id": "drift-jwt-session",
+      "description": "Authentication changes from bearer JWTs to server-side sessions.",
+      "tags": ["security", "typescript", "architecture"],
+      "codeFilePath": "src/auth/middleware.ts",
+      "patch": "@@ -8,2 +8,2 @@\n-const token = request.headers.authorization;\n-return verifyJwt(token);\n+const sessionId = request.cookies['session-id'];\n+return loadSession(sessionId);",
+      "docs": [{ "filePath": "docs/authentication.md", "content": "# Authentication\n\n## Request authentication\n`src/auth/middleware.ts` authenticates every request using a bearer JWT from the authorization header. Cookie sessions are never used." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/authentication.md" }
+    },
+    {
+      "id": "drift-default-model",
+      "description": "The default OpenAI model changes but the configuration table keeps the old default.",
+      "tags": ["configuration", "typescript", "ai"],
+      "codeFilePath": "src/models.ts",
+      "patch": "@@ -3,1 +3,1 @@\n-export const OPENAI_MODEL = 'gpt-4o';\n+export const OPENAI_MODEL = 'gpt-4o-mini';",
+      "docs": [{ "filePath": "README.md", "content": "# Configuration\n\n## Models\n`OPENAI_MODEL` in `src/models.ts` defaults to `gpt-4o`. Users get that model unless they override it." }],
+      "expected": { "isDrift": true, "docFilePath": "README.md" }
+    },
+    {
+      "id": "drift-service-port",
+      "description": "The service port changes from 3000 to 8080 while deployment docs prescribe 3000.",
+      "tags": ["deployment", "typescript", "configuration"],
+      "codeFilePath": "src/server.ts",
+      "patch": "@@ -7,1 +7,1 @@\n-export const API_PORT = 3000;\n+export const API_PORT = 8080;",
+      "docs": [{ "filePath": "docs/deployment.md", "content": "# Deployment\n\n## Networking\n`API_PORT` in `src/server.ts` is `3000`; containers and load balancers must route traffic to port 3000." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/deployment.md" }
+    },
+    {
+      "id": "drift-s3-gcs",
+      "description": "Object storage moves from Amazon S3 to Google Cloud Storage.",
+      "tags": ["architecture", "typescript", "migration"],
+      "codeFilePath": "src/storage/uploads.ts",
+      "patch": "@@ -3,2 +3,2 @@\n-import { S3Client } from '@aws-sdk/client-s3';\n-export const storageProvider = 's3';\n+import { Storage } from '@google-cloud/storage';\n+export const storageProvider = 'gcs';",
+      "docs": [{ "filePath": "docs/uploads.md", "content": "# Uploads\n\n## Storage\n`src/storage/uploads.ts` stores every uploaded object in Amazon S3 using `S3Client`. Google Cloud Storage is unsupported." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/uploads.md" }
+    },
+    {
+      "id": "drift-rabbitmq-kafka",
+      "description": "Event transport changes from RabbitMQ to Kafka.",
+      "tags": ["architecture", "typescript", "migration"],
+      "codeFilePath": "src/events/bus.ts",
+      "patch": "@@ -1,2 +1,2 @@\n-import amqp from 'amqplib';\n-export const eventBus = connectRabbitMq();\n+import { Kafka } from 'kafkajs';\n+export const eventBus = new Kafka({ clientId: 'api' });",
+      "docs": [{ "filePath": "docs/events.md", "content": "# Events\n\n## Message bus\n`src/events/bus.ts` publishes all domain events through RabbitMQ. Kafka is deliberately excluded to keep operations simple." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/events.md" }
+    },
+    {
+      "id": "drift-report-sync-async",
+      "description": "Report generation changes from synchronous completion to queued asynchronous work.",
+      "tags": ["behavior", "typescript", "architecture"],
+      "codeFilePath": "src/reports/generate.ts",
+      "patch": "@@ -10,2 +10,2 @@\n-export async function generateReport(id: string) { return buildPdf(id); }\n+export async function generateReport(id: string) { return enqueueReport(id); }",
+      "docs": [{ "filePath": "docs/reports.md", "content": "# Reports\n\n## Generation\n`generateReport` in `src/reports/generate.ts` builds and returns the finished PDF synchronously within the request. It never enqueues background work." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/reports.md" }
+    },
+    {
+      "id": "drift-encryption-algorithm",
+      "description": "Payload encryption changes away from the exact documented cipher.",
+      "tags": ["security", "typescript", "configuration"],
+      "codeFilePath": "src/crypto/payload.ts",
+      "patch": "@@ -4,1 +4,1 @@\n-export const CIPHER = 'aes-256-gcm';\n+export const CIPHER = 'chacha20-poly1305';",
+      "docs": [{ "filePath": "SECURITY.md", "content": "# Security\n\n## Payload encryption\n`CIPHER` in `src/crypto/payload.ts` is always `aes-256-gcm`. Interoperating clients must use AES-256-GCM." }],
+      "expected": { "isDrift": true, "docFilePath": "SECURITY.md" }
+    },
+    {
+      "id": "drift-rate-limit",
+      "description": "The public request limit is reduced while docs guarantee the former value.",
+      "tags": ["api", "typescript", "configuration"],
+      "codeFilePath": "src/http/rate-limit.ts",
+      "patch": "@@ -2,1 +2,1 @@\n-export const REQUESTS_PER_MINUTE = 100;\n+export const REQUESTS_PER_MINUTE = 20;",
+      "docs": [{ "filePath": "docs/rate-limits.md", "content": "# Rate limits\n\n## Public API\n`REQUESTS_PER_MINUTE` in `src/http/rate-limit.ts` permits exactly `100` requests per client each minute." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/rate-limits.md" }
+    },
+    {
+      "id": "drift-replica-writes",
+      "description": "A read-only replica begins receiving writes contrary to the architecture guarantee.",
+      "tags": ["database", "typescript", "behavior"],
+      "codeFilePath": "src/db/replica.ts",
+      "patch": "@@ -12,1 +12,2 @@\n-return replica.query(selectUser, [id]);\n+await replica.query(updateLastSeen, [id]);\n+return replica.query(selectUser, [id]);",
+      "docs": [{ "filePath": "docs/database.md", "content": "# Database\n\n## Read replica\n`src/db/replica.ts` performs reads only. No UPDATE, INSERT, or DELETE query is ever sent to the replica." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/database.md" }
+    },
+    {
+      "id": "drift-webhook-signature",
+      "description": "Webhook HMAC changes from SHA-256 to SHA-512.",
+      "tags": ["security", "typescript", "api"],
+      "codeFilePath": "src/webhooks/verify.ts",
+      "patch": "@@ -5,1 +5,1 @@\n-return createHmac('sha256', secret).update(body).digest('hex');\n+return createHmac('sha512', secret).update(body).digest('hex');",
+      "docs": [{ "filePath": "docs/webhooks.md", "content": "# Webhooks\n\n## Signature verification\n`src/webhooks/verify.ts` signs payloads with `sha256`. Consumers must calculate an HMAC-SHA256 digest." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/webhooks.md" }
+    },
+    {
+      "id": "drift-feature-default",
+      "description": "A feature becomes enabled by default despite documentation saying it is opt-in.",
+      "tags": ["configuration", "typescript", "behavior"],
+      "codeFilePath": "src/features/search.ts",
+      "patch": "@@ -1,1 +1,1 @@\n-export const SEMANTIC_SEARCH_ENABLED = false;\n+export const SEMANTIC_SEARCH_ENABLED = true;",
+      "docs": [{ "filePath": "docs/features.md", "content": "# Features\n\n## Semantic search\n`SEMANTIC_SEARCH_ENABLED` in `src/features/search.ts` defaults to `false`. Semantic search is strictly opt-in." }],
+      "expected": { "isDrift": true, "docFilePath": "docs/features.md" }
+    },
+    {
+      "id": "clean-request-logging",
+      "description": "Structured request logging is added without contradicting the API architecture.",
+      "tags": ["observability", "typescript", "additive"],
+      "codeFilePath": "src/http/app.ts",
+      "patch": "@@ -3,1 +3,2 @@\n const app = express();\n+app.use(requestLogger());",
+      "docs": [{ "filePath": "docs/http.md", "content": "# HTTP service\n\n## Middleware\n`src/http/app.ts` uses Express middleware. Additional middleware such as `requestLogger` may be installed for operational needs." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/http.md" }
+    },
+    {
+      "id": "clean-function-rename",
+      "description": "An internal function is renamed while its documented behavior stays identical.",
+      "tags": ["refactor", "typescript", "behavior"],
+      "codeFilePath": "src/cart/total.ts",
+      "patch": "@@ -1,1 +1,1 @@\n-export function calculateTotal(items: Item[]) {\n+export function computeTotal(items: Item[]) {",
+      "docs": [{ "filePath": "docs/cart.md", "content": "# Cart\n\n## Totals\n`src/cart/total.ts` sums item prices and applies discounts before returning the cart total. The internal helper name is not part of the public API." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/cart.md" }
+    },
+    {
+      "id": "clean-optional-redis-cache",
+      "description": "An optional cache is added where documentation explicitly permits caching.",
+      "tags": ["performance", "typescript", "additive"],
+      "codeFilePath": "src/catalog/products.ts",
+      "patch": "@@ -4,1 +4,2 @@\n export async function listProducts() {\n+  const cached = await redis.get('products');",
+      "docs": [{ "filePath": "docs/catalog.md", "content": "# Catalog\n\n## Product reads\n`listProducts` in `src/catalog/products.ts` returns product records from the primary database. Implementations may use Redis as a transparent read cache." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/catalog.md" }
+    },
+    {
+      "id": "clean-error-wording",
+      "description": "Only an error message changes; the documented status and endpoint remain stable.",
+      "tags": ["api", "typescript", "refactor"],
+      "codeFilePath": "src/routes/users.ts",
+      "patch": "@@ -9,1 +9,1 @@\n-return response.status(404).json({ error: 'User missing' });\n+return response.status(404).json({ error: 'User not found' });",
+      "docs": [{ "filePath": "docs/api.md", "content": "# API\n\n## User lookup\n`src/routes/users.ts` returns HTTP `404` when a user cannot be found. Error-message wording is not a stable contract." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/api.md" }
+    },
+    {
+      "id": "clean-env-timeout-override",
+      "description": "A configurable override is added while retaining the documented default timeout.",
+      "tags": ["configuration", "typescript", "additive"],
+      "codeFilePath": "src/config/timeout.ts",
+      "patch": "@@ -1,1 +1,1 @@\n-export const REQUEST_TIMEOUT = 30;\n+export const REQUEST_TIMEOUT = Number(process.env.REQUEST_TIMEOUT ?? 30);",
+      "docs": [{ "filePath": "docs/configuration.md", "content": "# Configuration\n\n## Timeouts\n`REQUEST_TIMEOUT` in `src/config/timeout.ts` defaults to `30` seconds and can be overridden through deployment configuration." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/configuration.md" }
+    },
+    {
+      "id": "clean-tax-test",
+      "description": "A new edge-case test does not change the documented tax calculation.",
+      "tags": ["tests", "typescript", "additive"],
+      "codeFilePath": "src/tax/calculate.test.ts",
+      "patch": "@@ -10,1 +10,2 @@\n describe('calculateTax', () => {\n+  it('returns zero for a zero subtotal', () => expect(calculateTax(0)).toBe(0));",
+      "docs": [{ "filePath": "docs/tax.md", "content": "# Tax\n\n## Calculation\n`calculateTax` is covered by unit tests in `src/tax/calculate.test.ts`. Tax rules themselves are implemented in the production module." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/tax.md" }
+    },
+    {
+      "id": "clean-theme-color",
+      "description": "A theme token changes where documentation promises customization, not a specific color.",
+      "tags": ["ui", "typescript", "configuration"],
+      "codeFilePath": "src/theme/colors.ts",
+      "patch": "@@ -2,1 +2,1 @@\n-export const primaryColor = 'blue';\n+export const primaryColor = 'indigo';",
+      "docs": [{ "filePath": "docs/theming.md", "content": "# Theming\n\n## Colors\n`primaryColor` in `src/theme/colors.ts` is a customizable design token. Applications may select any accessible brand color." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/theming.md" }
+    },
+    {
+      "id": "clean-add-api-endpoint",
+      "description": "A new endpoint is added to non-exhaustive API documentation.",
+      "tags": ["api", "typescript", "additive"],
+      "codeFilePath": "src/routes/health.ts",
+      "patch": "@@ -2,1 +2,2 @@\n const router = Router();\n+router.get('/api/v1/health', healthCheck);",
+      "docs": [{ "filePath": "docs/api.md", "content": "# API\n\n## Overview\nRoutes in `src/routes/health.ts` use the `/api/v1/` prefix. Examples include `/api/v1/users`; the list is not exhaustive and new endpoints may be added." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/api.md" }
+    },
+    {
+      "id": "clean-express-version-bump",
+      "description": "A dependency patch update retains the same documented framework.",
+      "tags": ["dependencies", "javascript", "maintenance"],
+      "codeFilePath": "package.json",
+      "patch": "@@ -8,1 +8,1 @@\n-    \"express\": \"5.1.0\"\n+    \"express\": \"5.1.1\"",
+      "docs": [{ "filePath": "docs/architecture.md", "content": "# Architecture\n\n## Web framework\nThe service uses Express, declared in `package.json`. Compatible maintenance releases may be adopted without changing the architecture." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/architecture.md" }
+    },
+    {
+      "id": "clean-null-guard",
+      "description": "A defensive null check enforces rather than contradicts the documented behavior.",
+      "tags": ["reliability", "typescript", "refactor"],
+      "codeFilePath": "src/accounts/find.ts",
+      "patch": "@@ -6,1 +6,2 @@\n export function findAccount(id?: string) {\n+  if (!id) return null;",
+      "docs": [{ "filePath": "docs/accounts.md", "content": "# Accounts\n\n## Lookup\n`findAccount` in `src/accounts/find.ts` returns `null` when no account identifier is supplied or no record exists." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/accounts.md" }
+    },
+    {
+      "id": "clean-database-variable-rename",
+      "description": "A local PostgreSQL variable is renamed without changing storage behavior.",
+      "tags": ["database", "typescript", "refactor"],
+      "codeFilePath": "src/db/connection.ts",
+      "patch": "@@ -2,2 +2,2 @@\n-const pool = new Pool();\n-export { pool };\n+const databasePool = new Pool();\n+export { databasePool as pool };",
+      "docs": [{ "filePath": "docs/database.md", "content": "# Database\n\n## Connection\n`src/db/connection.ts` connects to PostgreSQL with the `pg` Pool and exports a shared pool. Internal variable names are not contractual." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/database.md" }
+    },
+    {
+      "id": "clean-telemetry-opt-in",
+      "description": "An opt-in telemetry path is added while preserving the documented disabled default.",
+      "tags": ["privacy", "typescript", "additive"],
+      "codeFilePath": "src/telemetry/config.ts",
+      "patch": "@@ -1,1 +1,2 @@\n export const telemetryEnabled = false;\n+export const enableTelemetry = () => process.env.TELEMETRY_OPT_IN === 'true';",
+      "docs": [{ "filePath": "docs/privacy.md", "content": "# Privacy\n\n## Telemetry\n`telemetryEnabled` in `src/telemetry/config.ts` is `false` by default. A user may explicitly opt in through configuration." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/privacy.md" }
+    },
+    {
+      "id": "clean-configurable-timeout-change",
+      "description": "A timeout value changes where docs intentionally make no numeric guarantee.",
+      "tags": ["configuration", "typescript", "maintenance"],
+      "codeFilePath": "src/jobs/timeout.ts",
+      "patch": "@@ -1,1 +1,1 @@\n-export const JOB_TIMEOUT_SECONDS = 30;\n+export const JOB_TIMEOUT_SECONDS = 45;",
+      "docs": [{ "filePath": "docs/jobs.md", "content": "# Jobs\n\n## Timeouts\n`JOB_TIMEOUT_SECONDS` in `src/jobs/timeout.ts` is tuned as operational needs change. No fixed timeout duration is part of the public contract." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/jobs.md" }
+    },
+    {
+      "id": "clean-add-payment-provider",
+      "description": "PayPal support is added alongside Stripe; docs never claim Stripe is exclusive.",
+      "tags": ["payments", "typescript", "additive"],
+      "codeFilePath": "src/payments/providers.ts",
+      "patch": "@@ -1,1 +1,2 @@\n export const providers = ['stripe'];\n+providers.push('paypal');",
+      "docs": [{ "filePath": "docs/payments.md", "content": "# Payments\n\n## Providers\n`src/payments/providers.ts` supports Stripe. The provider registry is extensible and may include PayPal or other processors." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/payments.md" }
+    },
+    {
+      "id": "clean-internal-module-move",
+      "description": "An internal module path changes while the documented public import remains stable.",
+      "tags": ["refactor", "typescript", "architecture"],
+      "codeFilePath": "src/index.ts",
+      "patch": "@@ -1,1 +1,1 @@\n-export { createClient } from './internal/client';\n+export { createClient } from './core/client';",
+      "docs": [{ "filePath": "docs/sdk.md", "content": "# SDK\n\n## Public API\nConsumers import `createClient` from the package root exposed by `src/index.ts`. Files under `internal` or `core` are implementation details." }],
+      "expected": { "isDrift": false, "docFilePath": "docs/sdk.md" }
+    }
+  ]
+}

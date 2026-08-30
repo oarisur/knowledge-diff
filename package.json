@@ -7,6 +7,9 @@
   "scripts": {
     "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "build:watch": "tsc --watch",
+    "evaluate:bundle": "esbuild src/evaluation-cli.ts --bundle --platform=node --format=cjs --outfile=.evaluation-dist/evaluate.cjs --log-level=warning",
+    "evaluate": "npm run evaluate:bundle --silent && node --no-deprecation .evaluation-dist/evaluate.cjs",
+    "evaluate:gate": "npm run evaluate -- --gate",
     "test": "jest --coverage",
     "lint": "eslint \"src/**/*.ts\" \"__tests__/**/*.ts\"",
     "typecheck": "tsc --noEmit",
@@ -38,6 +41,7 @@
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
     "@vercel/ncc": "^0.38.4",
+    "esbuild": "^0.28.2",
     "eslint": "^10.4.0",
     "jest": "^30.4.2",
     "ts-jest": "^29.4.11",
@@ -56,7 +60,8 @@
     },
     "collectCoverageFrom": [
       "src/**/*.ts",
-      "!src/index.ts"
+      "!src/index.ts",
+      "!src/evaluation-cli.ts"
     ],
     "coverageThreshold": {
       "global": {

@@ -2,6 +2,7 @@ node_modules/
 
 # Build output is committed for GitHub Actions, but ignore intermediate artifacts
 *.tsbuildinfo
+.evaluation-dist/
 
 # IDE
 .idea/

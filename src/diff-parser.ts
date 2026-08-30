@@ -135,7 +135,8 @@ function estimateTokens(text: string): number {
 export function parsePRFiles(
   files: Array<{ filename: string; patch?: string; status: string }>,
   allowedExtensions: string[],
-  maxFiles: number
+  maxFiles: number,
+  silent = false
 ): { changedFiles: ChangedFile[]; skippedFiles: string[] } {
   const changedFiles: ChangedFile[] = [];
   const skippedFiles: string[] = [];
@@ -154,7 +155,7 @@ export function parsePRFiles(
     }
 
     if (!file.patch) {
-      core.debug(`No patch data for ${file.filename}, skipping.`);
+      if (!silent) core.debug(`No patch data for ${file.filename}, skipping.`);
       skippedFiles.push(`${file.filename} (no patch data)`);
       continue;
     }
@@ -184,9 +185,11 @@ export function parsePRFiles(
     processed++;
   }
 
-  core.info(
-    `Diff parser: ${changedFiles.length} code files to analyse, ${skippedFiles.length} skipped.`
-  );
+  if (!silent) {
+    core.info(
+      `Diff parser: ${changedFiles.length} code files to analyse, ${skippedFiles.length} skipped.`
+    );
+  }
 
   return { changedFiles, skippedFiles };
 }
