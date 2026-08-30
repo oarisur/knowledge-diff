@@ -22,6 +22,7 @@ npm run lint        # ESLint
 npm test            # Jest unit tests
 npm run evaluate:gate # deterministic candidate-retrieval quality gate
 npm run build       # Bundle to dist/ via ncc
+npm run hosted:build # Bundle the hosted GitHub App server
 ```
 
 4. **Commit `dist/`** — GitHub Actions require the bundled output to be checked in.

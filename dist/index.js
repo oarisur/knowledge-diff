@@ -113662,7 +113662,7 @@ const CONFIDENCE_LABEL = {
     possible: "Possibly ambiguous",
 };
 // ─── Comment Body Builder ─────────────────────────────────────────────────────
-function buildCommentBody(result, patchPR, repoUrl) {
+function buildCommentBody(result, patchPR, repoUrl, commentMarker = COMMENT_MARKER) {
     const actionable = result.driftResults.filter((r) => r.meetsThreshold);
     const analysisErrors = result.analysisErrors ?? [];
     const errorDetails = analysisErrors.length > 0
@@ -113672,7 +113672,7 @@ function buildCommentBody(result, patchPR, repoUrl) {
         : "";
     if (actionable.length === 0) {
         if (analysisErrors.length > 0) {
-            return `${COMMENT_MARKER}
+            return `${commentMarker}
 ## ⚠️ Knowledge Diff — Analysis Incomplete
 
 No documentation drift was reported, but Knowledge Diff could not complete every check. **This is not an all-clear result.**
@@ -113683,7 +113683,7 @@ ${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.leng
 
 <sub>🧠 [knowledge-diff](${repoUrl}) • received ${result.driftResults.length}/${result.totalCandidates} candidate result(s)</sub>`;
         }
-        return `${COMMENT_MARKER}
+        return `${commentMarker}
 ## ✅ Knowledge Diff — No Rationale Drift Detected
 
 Checked **${result.checkedFiles}** changed file(s) against **${result.docFilesChecked.length}** documentation file(s) — all clear.
@@ -113700,7 +113700,7 @@ ${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.leng
             byFile.set(key, []);
         byFile.get(key).push(dr);
     }
-    let body = `${COMMENT_MARKER}
+    let body = `${commentMarker}
 ## 🧠 Knowledge Diff — Rationale Drift Detected
 
 I found **${actionable.length}** documentation drift issue(s) in this PR. The code changed, but the docs didn't keep up.
@@ -113750,20 +113750,21 @@ ${analysisErrors.length > 0 ? `> ⚠️ **Analysis incomplete:** Some checks fai
     }
     body += `\n<sub>🧠 [knowledge-diff](${repoUrl}) • ${result.totalCandidates} candidate pair(s) checked</sub>`;
     if (body.length > MAX_COMMENT_LENGTH) {
-        const truncationNotice = `\n\n---\n\n> ⚠️ **Comment truncated** — ${actionable.length} drift issue(s) found but the full report exceeded GitHub's comment size limit. Review the action logs for complete details.\n\n${COMMENT_MARKER.replace('v1', 'truncated')}`;
+        const truncationNotice = `\n\n---\n\n> ⚠️ **Comment truncated** — ${actionable.length} drift issue(s) found but the full report exceeded GitHub's comment size limit. Review the action logs for complete details.\n\n${commentMarker.replace('v1', 'truncated')}`;
         body = body.slice(0, MAX_COMMENT_LENGTH - truncationNotice.length) + truncationNotice;
     }
     return body;
 }
 class PRCommenter {
-    constructor(octokit, ctx, commentMode) {
+    constructor(octokit, ctx, commentMode, commentMarker = COMMENT_MARKER) {
         this.octokit = octokit;
         this.ctx = ctx;
         this.commentMode = commentMode;
+        this.commentMarker = commentMarker;
     }
     async postOrUpdate(result, patchPR) {
         const repoUrl = `https://github.com/${this.ctx.owner}/${this.ctx.repo}`;
-        const body = buildCommentBody(result, patchPR, repoUrl);
+        const body = buildCommentBody(result, patchPR, repoUrl, this.commentMarker);
         if (this.commentMode === "update") {
             const existingId = await this.findExistingComment();
             if (existingId) {
@@ -113794,7 +113795,7 @@ class PRCommenter {
             per_page: 100,
         }), 'listComments');
         for (const comment of comments) {
-            if (comment.body?.includes(COMMENT_MARKER)) {
+            if (comment.body?.includes(this.commentMarker)) {
                 return comment.id;
             }
         }

@@ -5,11 +5,15 @@
   "main": "dist/index.js",
   "author": "Oarisur Rahman (@oarisur)",
   "scripts": {
-    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build": "npm run build:action && npm run hosted:build",
+    "build:action": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
     "build:watch": "tsc --watch",
     "evaluate:bundle": "esbuild src/evaluation-cli.ts --bundle --platform=node --format=cjs --outfile=.evaluation-dist/evaluate.cjs --log-level=warning",
     "evaluate": "npm run evaluate:bundle --silent && node --no-deprecation .evaluation-dist/evaluate.cjs",
     "evaluate:gate": "npm run evaluate -- --gate",
+    "hosted:build": "esbuild src/hosted-main.ts --bundle --platform=node --format=cjs --outfile=.hosted-dist/server.cjs --log-level=warning",
+    "hosted:start": "node --no-deprecation .hosted-dist/server.cjs",
+    "hosted:dev": "npm run hosted:build && npm run hosted:start",
     "test": "jest --coverage",
     "lint": "eslint \"src/**/*.ts\" \"__tests__/**/*.ts\"",
     "typecheck": "tsc --noEmit",
@@ -31,7 +35,8 @@
     "@google/genai": "^2.6.0",
     "glob": "^13.0.6",
     "minimatch": "^10.2.5",
-    "openai": "^4.52.7"
+    "openai": "^4.52.7",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -61,7 +66,8 @@
     "collectCoverageFrom": [
       "src/**/*.ts",
       "!src/index.ts",
-      "!src/evaluation-cli.ts"
+      "!src/evaluation-cli.ts",
+      "!src/hosted-main.ts"
     ],
     "coverageThreshold": {
       "global": {

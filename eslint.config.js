@@ -27,7 +27,11 @@ module.exports = [
         console: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        fetch: "readonly",
         AbortController: "readonly",
+        AbortSignal: "readonly",
+        NodeJS: "readonly",
+        URL: "readonly",
         describe: "readonly",
         test: "readonly",
         expect: "readonly",
@@ -62,6 +66,8 @@ module.exports = [
         console: "readonly",
         setTimeout: "readonly",
         clearTimeout: "readonly",
+        fetch: "readonly",
+        Response: "readonly",
         require: "readonly",
         describe: "readonly",
         test: "readonly",
@@ -86,4 +92,3 @@ module.exports = [
     }
   }
 ];
-

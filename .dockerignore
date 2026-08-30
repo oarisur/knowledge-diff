@@ -1,0 +1,12 @@
+.git
+.github
+.evaluation-dist
+.hosted-dist
+coverage
+dist
+evaluation
+node_modules
+__tests__
+*.log
+.env*
+!/.env.hosted.example

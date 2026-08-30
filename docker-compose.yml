@@ -1,0 +1,13 @@
+services:
+  knowledge-diff:
+    build: .
+    env_file:
+      - .env
+    ports:
+      - "3000:3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped

@@ -1,0 +1,25 @@
+{
+  "name": "Knowledge Diff",
+  "url": "https://YOUR_HOSTNAME.example.com",
+  "hook_attributes": {
+    "url": "https://YOUR_HOSTNAME.example.com/api/github/webhooks",
+    "active": true
+  },
+  "redirect_url": "https://YOUR_HOSTNAME.example.com",
+  "callback_urls": [
+    "https://YOUR_HOSTNAME.example.com"
+  ],
+  "setup_url": "https://YOUR_HOSTNAME.example.com",
+  "setup_on_update": false,
+  "public": true,
+  "request_oauth_on_install": false,
+  "default_permissions": {
+    "checks": "write",
+    "contents": "read",
+    "metadata": "read",
+    "pull_requests": "write"
+  },
+  "default_events": [
+    "pull_request"
+  ]
+}

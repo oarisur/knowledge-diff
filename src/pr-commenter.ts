@@ -29,7 +29,8 @@ const CONFIDENCE_LABEL: Record<string, string> = {
 function buildCommentBody(
   result: AnalysisResult,
   patchPR: PatchPRResult | null,
-  repoUrl: string
+  repoUrl: string,
+  commentMarker = COMMENT_MARKER
 ): string {
   const actionable = result.driftResults.filter((r) => r.meetsThreshold);
   const analysisErrors = result.analysisErrors ?? [];
@@ -42,7 +43,7 @@ function buildCommentBody(
 
   if (actionable.length === 0) {
     if (analysisErrors.length > 0) {
-      return `${COMMENT_MARKER}
+      return `${commentMarker}
 ## ⚠️ Knowledge Diff — Analysis Incomplete
 
 No documentation drift was reported, but Knowledge Diff could not complete every check. **This is not an all-clear result.**
@@ -54,7 +55,7 @@ ${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.leng
 <sub>🧠 [knowledge-diff](${repoUrl}) • received ${result.driftResults.length}/${result.totalCandidates} candidate result(s)</sub>`;
     }
 
-    return `${COMMENT_MARKER}
+    return `${commentMarker}
 ## ✅ Knowledge Diff — No Rationale Drift Detected
 
 Checked **${result.checkedFiles}** changed file(s) against **${result.docFilesChecked.length}** documentation file(s) — all clear.
@@ -72,7 +73,7 @@ ${result.skippedFiles.length > 0 ? `<details><summary>${result.skippedFiles.leng
     byFile.get(key)!.push(dr);
   }
 
-  let body = `${COMMENT_MARKER}
+  let body = `${commentMarker}
 ## 🧠 Knowledge Diff — Rationale Drift Detected
 
 I found **${actionable.length}** documentation drift issue(s) in this PR. The code changed, but the docs didn't keep up.
@@ -137,7 +138,7 @@ ${analysisErrors.length > 0 ? `> ⚠️ **Analysis incomplete:** Some checks fai
   body += `\n<sub>🧠 [knowledge-diff](${repoUrl}) • ${result.totalCandidates} candidate pair(s) checked</sub>`;
 
   if (body.length > MAX_COMMENT_LENGTH) {
-    const truncationNotice = `\n\n---\n\n> ⚠️ **Comment truncated** — ${actionable.length} drift issue(s) found but the full report exceeded GitHub's comment size limit. Review the action logs for complete details.\n\n${COMMENT_MARKER.replace('v1', 'truncated')}`;
+    const truncationNotice = `\n\n---\n\n> ⚠️ **Comment truncated** — ${actionable.length} drift issue(s) found but the full report exceeded GitHub's comment size limit. Review the action logs for complete details.\n\n${commentMarker.replace('v1', 'truncated')}`;
     body = body.slice(0, MAX_COMMENT_LENGTH - truncationNotice.length) + truncationNotice;
   }
 
@@ -152,11 +153,18 @@ export class PRCommenter {
   private octokit: OctokitClient;
   private ctx: PRContext;
   private commentMode: "update" | "new";
+  private commentMarker: string;
 
-  constructor(octokit: OctokitClient, ctx: PRContext, commentMode: "update" | "new") {
+  constructor(
+    octokit: OctokitClient,
+    ctx: PRContext,
+    commentMode: "update" | "new",
+    commentMarker = COMMENT_MARKER
+  ) {
     this.octokit = octokit;
     this.ctx = ctx;
     this.commentMode = commentMode;
+    this.commentMarker = commentMarker;
   }
 
   async postOrUpdate(
@@ -164,7 +172,7 @@ export class PRCommenter {
     patchPR: PatchPRResult | null
   ): Promise<void> {
     const repoUrl = `https://github.com/${this.ctx.owner}/${this.ctx.repo}`;
-    const body = buildCommentBody(result, patchPR, repoUrl);
+    const body = buildCommentBody(result, patchPR, repoUrl, this.commentMarker);
 
     if (this.commentMode === "update") {
       const existingId = await this.findExistingComment();
@@ -205,7 +213,7 @@ export class PRCommenter {
     );
 
     for (const comment of comments) {
-      if (comment.body?.includes(COMMENT_MARKER)) {
+      if (comment.body?.includes(this.commentMarker)) {
         return comment.id;
       }
     }

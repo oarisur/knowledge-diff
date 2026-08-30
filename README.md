@@ -254,6 +254,31 @@ Do not switch to `pull_request_target` while checking out or executing untrusted
 
 ---
 
+## Hosted GitHub App
+
+The repository now includes a deployable server-side GitHub App for teams that do not want LLM keys in repository Actions.
+
+```bash
+cp .env.hosted.example .env
+docker compose up --build
+```
+
+The hosted service provides:
+
+- HMAC-SHA256 webhook verification against the raw request body
+- short-lived GitHub installation-token authentication
+- GitHub check runs and update-in-place hosted PR comments
+- safe analysis of fork PRs without checking out or executing their code
+- trusted-base `.github/knowledge-diff.yml` configuration
+- bounded concurrency, latest-event queueing, delivery deduplication, health checks, JSON logs, and graceful shutdown
+- a non-root, read-only production container
+
+Register the App with `contents: read`, `pull_requests: write`, and `checks: write`, subscribe to the Pull request event, and point its webhook to `/api/github/webhooks`. See the complete [hosted GitHub App deployment guide](docs/HOSTED_GITHUB_APP.md) and [registration manifest template](deploy/github-app-manifest.json).
+
+The included queue is intended for one service instance. Add a shared durable queue/idempotency backend before horizontal scaling.
+
+---
+
 ## Quality Evaluation
 
 Knowledge Diff includes a versioned benchmark with **30 hand-labeled cases**: 15 real documentation contradictions and 15 relevant-but-harmless changes. It measures candidate retrieval separately from model classification so a mocked LLM cannot create a misleading quality score.

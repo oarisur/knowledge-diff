@@ -1,0 +1,23 @@
+# This file belongs at .github/knowledge-diff.yml on the repository's base branch.
+enabled: true
+provider: openai
+# model: gpt-4o-mini
+sensitivity: medium
+
+doc-files:
+  - README.md
+  - ARCHITECTURE.md
+  - docs/**/*.md
+  - "**/AGENTS.md"
+  - "**/CLAUDE.md"
+  - .github/copilot-instructions.md
+
+code-extensions: [ts, tsx, js, jsx, py, go, rs, java]
+max-files-per-run: 20
+max-doc-files: 100
+comment-mode: update
+fail-on-drift: false
+skip-drafts: true
+ignore-authors:
+  - dependabot[bot]
+ignore-branches: []
