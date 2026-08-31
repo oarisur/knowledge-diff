@@ -27,3 +27,6 @@ coverage/
 
 # Cache
 .eslintcache
+
+# Local product and business planning
+/docs/PROFITABILITY_ROADMAP.md
