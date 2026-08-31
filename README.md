@@ -5,6 +5,8 @@
 [![GitHub Marketplace](https://img.shields.io/badge/Marketplace-Knowledge%20Diff-blue?logo=github)](https://github.com/marketplace/actions/knowledge-diff)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+See the [changelog](CHANGELOG.md) for release history.
+
 ---
 
 ## The Problem

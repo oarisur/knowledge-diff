@@ -1,6 +1,6 @@
 {
   "name": "knowledge-diff",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "GitHub Action that detects rationale drift between code changes and project documentation.",
   "main": "dist/index.js",
   "author": "Oarisur Rahman (@oarisur)",
