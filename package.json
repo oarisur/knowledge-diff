@@ -34,7 +34,7 @@
     "@anthropic-ai/sdk": "^0.24.3",
     "@google/genai": "^2.6.0",
     "glob": "^13.0.6",
-    "minimatch": "^10.2.5",
+    "minimatch": "^10.2.6",
     "openai": "^4.52.7",
     "yaml": "^2.9.0"
   },
